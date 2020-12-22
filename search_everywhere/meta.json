@@ -1,0 +1,1 @@
+{"conflicts": ["276327026"], "mod": 1585685623, "name": "Search Everywhere - Ctrl+F Find", "config": {"hotkey_next_match": "Ctrl+G", "hotkey_previous_match": "Ctrl+Shift+G", "hotkey_search": "Ctrl+Shift+H", "hotkey_search_browser": "Ctrl+Alt+Shift+H"}, "disabled": true, "max_point_version": 0, "min_point_version": 0, "branch_index": 0}

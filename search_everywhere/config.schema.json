@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Search Everywhere",
+  "properties": {
+    "hotkey_search": {
+      "type": "string",
+      "title": "Search hotkey",
+      "description": "Hotkey that invokes the search bar",
+      "pattern": "^((([Cc][Tt][Rr][Ll]|[Aa][Ll][Tt]|[Ss][Hh][Ii][Ff][Tt])\\+){0,3}([a-zA-Z0-9]|F[1-9]|F1[0-2]))?$",
+      "default": "Ctrl+F"
+    },
+    "hotkey_search_browser": {
+      "type": "string",
+      "title": "Search hotkey (browser)",
+      "description": "Hotkey that invokes the search bar in the card browser",
+      "pattern": "^((([Cc][Tt][Rr][Ll]|[Aa][Ll][Tt]|[Ss][Hh][Ii][Ff][Tt])\\+){0,3}([a-zA-Z0-9]|F[1-9]|F1[0-2]))?$",
+      "default": "Ctrl+Alt+Shift+F"
+    },
+    "hotkey_next_match": {
+      "type": "string",
+      "title": "Next match hotkey",
+      "description": "Hotkey that switches to the next result",
+      "pattern": "^((([Cc][Tt][Rr][Ll]|[Aa][Ll][Tt]|[Ss][Hh][Ii][Ff][Tt])\\+){0,3}([a-zA-Z0-9]|F[1-9]|F1[0-2]))?$",
+      "default": "Ctrl+G"
+    },
+    "hotkey_previous_match": {
+      "type": "string",
+      "title": "Previous match hotkey",
+      "description": "Hotkey that switches to the previous result",
+      "pattern": "^((([Cc][Tt][Rr][Ll]|[Aa][Ll][Tt]|[Ss][Hh][Ii][Ff][Tt])\\+){0,3}([a-zA-Z0-9]|F[1-9]|F1[0-2]))?$",
+      "default": "Ctrl+Shift+G"
+    }
+  }
+}

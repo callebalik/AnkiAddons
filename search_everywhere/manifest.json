@@ -1,0 +1,12 @@
+{
+    "name": "Search Everywhere - Ctrl+F Find",
+    "package": "search_everywhere",
+    "ankiweb_id": "276327026",
+    "author": "Glutanimate",
+    "version": "v0.2.0-beta.1",
+    "homepage": "https://github.com/glutanimate/search-everywhere",
+    "conflicts": [
+        "276327026"
+    ],
+    "mod": 1585685623
+}
