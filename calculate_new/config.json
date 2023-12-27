@@ -1,0 +1,12 @@
+{
+    "goals": [
+        {
+            "name": "Example",
+            "due": "Dec 23 2021",
+            "query": "",
+            "days_per_week": 7,
+            "excluded_dates": "",
+            "show_on_main": false
+        }
+    ]
+}

@@ -34,8 +34,7 @@ import paramiko
 import paramiko.client
 
 
-class _ParamikoWrapper(object):
-
+class _ParamikoWrapper:
     def __init__(self, client, channel):
         self.client = client
         self.channel = channel
@@ -45,7 +44,7 @@ class _ParamikoWrapper(object):
 
     @property
     def stderr(self):
-        return self.channel.makefile_stderr()
+        return self.channel.makefile_stderr('rb')
 
     def can_read(self):
         return self.channel.recv_ready()
@@ -59,7 +58,7 @@ class _ParamikoWrapper(object):
 
         # Closed socket
         if not data:
-            return b''
+            return b""
 
         # Read more if needed
         if n and data_len < n:
@@ -71,31 +70,38 @@ class _ParamikoWrapper(object):
         self.channel.close()
 
 
-class ParamikoSSHVendor(object):
+class ParamikoSSHVendor:
     # http://docs.paramiko.org/en/2.4/api/client.html
 
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
-    def run_command(self, host, command,
-                    username=None, port=None,
-                    password=None, pkey=None,
-                    key_filename=None, **kwargs):
+    def run_command(
+        self,
+        host,
+        command,
+        username=None,
+        port=None,
+        password=None,
+        pkey=None,
+        key_filename=None,
+        **kwargs
+    ):
 
         client = paramiko.SSHClient()
 
-        connection_kwargs = {'hostname': host}
+        connection_kwargs = {"hostname": host}
         connection_kwargs.update(self.kwargs)
         if username:
-            connection_kwargs['username'] = username
+            connection_kwargs["username"] = username
         if port:
-            connection_kwargs['port'] = port
+            connection_kwargs["port"] = port
         if password:
-            connection_kwargs['password'] = password
+            connection_kwargs["password"] = password
         if pkey:
-            connection_kwargs['pkey'] = pkey
+            connection_kwargs["pkey"] = pkey
         if key_filename:
-            connection_kwargs['key_filename'] = key_filename
+            connection_kwargs["key_filename"] = key_filename
         connection_kwargs.update(kwargs)
 
         policy = paramiko.client.MissingHostKeyPolicy()

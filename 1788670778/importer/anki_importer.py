@@ -33,7 +33,7 @@ class AnkiJsonImporter:
             return False
 
         if aqt.mw:
-            aqt.mw.backup()
+            aqt.mw.create_backup_now()
         try:
             deck = deck_initializer.from_json(deck_json)
             deck.save_to_collection(self.collection, import_config=import_config)
@@ -89,7 +89,7 @@ class AnkiJsonImporter:
                 import_dict = yaml.full_load(meta_file)
 
         import_dialog = ImportDialog(deck_json, import_dict)
-        if import_dialog.exec_() == QDialog.Rejected:
+        if import_dialog.exec() == QDialog.DialogCode.Rejected:
             return None
 
         return import_dialog.final_import_config

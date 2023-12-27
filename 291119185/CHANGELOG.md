@@ -12,9 +12,28 @@ If you enjoy Batch Editing, please consider supporting my work on Patreon, or by
 
 ## [Unreleased]
 
+## [0.4.0] - 2023-10-26
+
+### [Download](https://github.com/glutanimate/batch-editing/releases/tag/v0.4.0)
+
+### Added
+
+- Added support for Anki 23.10 (thanks to @khonkortisan for the report)
+
+### Fixed
+
+- Fixed image button icon not working (thanks to @dollajas for the report)
+- Fixed image format changing from PNG to JPG when pasting images (thanks to @AH349 for the report)
+
+### Changed
+
+- Modernized and rewrote large parts of the codebase
+
 ## [0.3.0] - 2019-06-02
 
 ### [Download](https://github.com/glutanimate/batch-editing/releases/tag/v0.3.0)
+
+**Important note for Anki 2.0 users**: As this release completely overhauls the add-on structure, you will have to uninstall any existing versions of the add-on before updating. Otherwise you might end up with duplicate versions of the add-on that would interfere with each other. This should not be an issue on Anki 2.1
 
 ### Fixed
 
@@ -57,7 +76,9 @@ If you enjoy Batch Editing, please consider supporting my work on Patreon, or by
 
 - Initial release of Batch Editing
 
-[Unreleased]: https://github.com/glutanimate/batch-editing/compare/v0.0.0...HEAD
+[Unreleased]: https://github.com/glutanimate/batch-editing/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/glutanimate/batch-editing/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/glutanimate/batch-editing/releases/tag/v0.3.0
 
 -----
 

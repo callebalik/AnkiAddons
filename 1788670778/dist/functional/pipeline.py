@@ -1,9 +1,6 @@
 """
 The pipeline module contains the transformations and actions API of PyFunctional
 """
-
-from __future__ import division, absolute_import
-
 from operator import mul, add
 import collections
 from functools import reduce, wraps, partial
@@ -13,21 +10,28 @@ import csv
 import sqlite3
 import re
 
-import six
 from tabulate import tabulate
 
 from functional.execution import ExecutionEngine
 from functional.lineage import Lineage
-from functional.util import is_iterable, is_primitive, is_namedtuple, is_tabulatable, identity
+from functional.util import (
+    is_iterable,
+    is_primitive,
+    is_namedtuple,
+    is_tabulatable,
+    identity,
+)
 from functional.io import WRITE_MODE, universal_write_open
 from functional import transformations
 from functional.execution import ExecutionStrategies
+
 
 class Sequence(object):
     """
     Sequence is a wrapper around any type of sequence which provides access to common
     functional transformations and reductions in a data pipeline style
     """
+
     def __init__(self, sequence, transform=None, engine=None, max_repr_items=None):
         # pylint: disable=protected-access
         """
@@ -45,8 +49,7 @@ class Sequence(object):
         if isinstance(sequence, Sequence):
             self._max_repr_items = max_repr_items or sequence._max_repr_items
             self._base_sequence = sequence._base_sequence
-            self._lineage = Lineage(prior_lineage=sequence._lineage,
-                                    engine=engine)
+            self._lineage = Lineage(prior_lineage=sequence._lineage, engine=engine)
         elif isinstance(sequence, (list, tuple)) or is_iterable(sequence):
             self._max_repr_items = max_repr_items
             self._base_sequence = sequence
@@ -100,7 +103,7 @@ class Sequence(object):
         if self._max_repr_items is None or len(items) <= self._max_repr_items:
             return repr(items)
         else:
-            return repr(items[:self._max_repr_items])[:-1] + ', ...]'
+            return repr(items[: self._max_repr_items])[:-1] + ", ...]"
 
     def __str__(self):
         """
@@ -361,7 +364,9 @@ class Sequence(object):
         :param kwargs: the variable `repeat` is read from kwargs
         :return: cartesian product
         """
-        return self._transform(transformations.cartesian_t(iterables, kwargs.get('repeat', 1)))
+        return self._transform(
+            transformations.cartesian_t(iterables, kwargs.get("repeat", 1))
+        )
 
     def drop(self, n):
         """
@@ -936,7 +941,9 @@ class Sequence(object):
         elif len(initial) == 1:
             return _wrap(reduce(func, self, initial[0]))
         else:
-            raise ValueError('reduce takes exactly one optional parameter for initial value')
+            raise ValueError(
+                "reduce takes exactly one optional parameter for initial value"
+            )
 
     def accumulate(self, func=add):
         """
@@ -952,7 +959,6 @@ class Sequence(object):
         :return: accumulated values using func in sequence
         """
         return self._transform(transformations.accumulate_t(func))
-
 
     def make_string(self, separator):
         """
@@ -1065,7 +1071,9 @@ class Sequence(object):
             func = args[1]
             result_lambda = args[2]
         else:
-            raise ValueError('aggregate takes 1-3 arguments, {0} were given'.format(len(args)))
+            raise ValueError(
+                "aggregate takes 1-3 arguments, {0} were given".format(len(args))
+            )
         if len(args) == 1:
             return result_lambda(self.drop(1).fold_left(self.first(), func))
         else:
@@ -1157,7 +1165,7 @@ class Sequence(object):
         :param other: sequence to join with
         :return: joined sequence of (K, (V, W)) pairs
         """
-        return self.join(other, 'inner')
+        return self.join(other, "inner")
 
     def join(self, other, join_type="inner"):
         """
@@ -1379,7 +1387,7 @@ class Sequence(object):
         >>> seq([1, 2, 3]).list()
         [1, 2, 3]
 
-        :param n: Take n elements of sequenc eif not None
+        :param n: Take n elements of sequence if not None
         :return: list of elements in sequence
         """
         return self.to_list(n=n)
@@ -1440,7 +1448,7 @@ class Sequence(object):
         if default is None:
             return dictionary
         else:
-            if hasattr(default, '__call__'):
+            if hasattr(default, "__call__"):
                 return collections.defaultdict(default, dictionary)
             else:
                 return collections.defaultdict(lambda: default, dictionary)
@@ -1464,9 +1472,22 @@ class Sequence(object):
         return self.to_dict(default=default)
 
     # pylint: disable=too-many-locals
-    def to_file(self, path, delimiter=None, mode='wt', buffering=-1, encoding=None, errors=None,
-                newline=None, compresslevel=9, format=None, check=-1, preset=None, filters=None,
-                compression=None):
+    def to_file(
+        self,
+        path,
+        delimiter=None,
+        mode="wt",
+        buffering=-1,
+        encoding=None,
+        errors=None,
+        newline=None,
+        compresslevel=9,
+        format=None,
+        check=-1,
+        preset=None,
+        filters=None,
+        compression=None,
+    ):
         """
         Saves the sequence to a file by executing str(self) which becomes str(self.to_list()). If
         delimiter is defined will instead execute self.make_string(delimiter)
@@ -1485,16 +1506,26 @@ class Sequence(object):
         :param preset: passed to lzma.open
         :param filters: passed to lzma.open
         """
-        with universal_write_open(path, mode=mode, buffering=buffering, encoding=encoding,
-                                  errors=errors, newline=newline, compression=compression,
-                                  compresslevel=compresslevel, format=format, check=check,
-                                  preset=preset, filters=filters) as output:
+        with universal_write_open(
+            path,
+            mode=mode,
+            buffering=buffering,
+            encoding=encoding,
+            errors=errors,
+            newline=newline,
+            compression=compression,
+            compresslevel=compresslevel,
+            format=format,
+            check=check,
+            preset=preset,
+            filters=filters,
+        ) as output:
             if delimiter:
-                output.write(six.u(self.make_string(delimiter)))
+                output.write(self.make_string(delimiter))
             else:
-                output.write(six.u(str(self)))
+                output.write(str(self))
 
-    def to_jsonl(self, path, mode='wb', compression=None):
+    def to_jsonl(self, path, mode="wb", compression=None):
         """
         Saves the sequence to a jsonl file. Each element is mapped using json.dumps then written
         with a newline separating each element.
@@ -1504,7 +1535,9 @@ class Sequence(object):
         :param compression: compression format
         """
         with universal_write_open(path, mode=mode, compression=compression) as output:
-            output.write((self.map(json.dumps).make_string('\n') + '\n').encode('utf-8'))
+            output.write(
+                (self.map(json.dumps).make_string("\n") + "\n").encode("utf-8")
+            )
 
     def to_json(self, path, root_array=True, mode=WRITE_MODE, compression=None):
         """
@@ -1522,8 +1555,15 @@ class Sequence(object):
             else:
                 json.dump(self.to_dict(), output)
 
-    def to_csv(self, path, mode=WRITE_MODE, dialect='excel', compression=None,
-               newline='', **fmtparams):
+    def to_csv(
+        self,
+        path,
+        mode=WRITE_MODE,
+        dialect="excel",
+        compression=None,
+        newline="",
+        **fmtparams
+    ):
         """
         Saves the sequence to a csv file. Each element should be an iterable which will be expanded
         to the elements of each row.
@@ -1534,14 +1574,15 @@ class Sequence(object):
         :param fmtparams: passed to csv.writer
         """
 
-        if 'b' in mode:
+        if "b" in mode:
             newline = None
 
-        with universal_write_open(path, mode=mode, compression=compression,
-                                  newline=newline) as output:
+        with universal_write_open(
+            path, mode=mode, compression=compression, newline=newline
+        ) as output:
             csv_writer = csv.writer(output, dialect=dialect, **fmtparams)
             for row in self:
-                csv_writer.writerow([six.u(str(element)) for element in row])
+                csv_writer.writerow([str(element) for element in row])
 
     def _to_sqlite3_by_query(self, conn, sql):
         """
@@ -1563,24 +1604,32 @@ class Sequence(object):
         :param conn: path or sqlite connection, cursor
         :param table_name: table name string
         """
+
         def _insert_item(item):
             if isinstance(item, dict):
-                cols = ', '.join(item.keys())
-                placeholders = ', '.join('?' * len(item))
-                sql = 'INSERT INTO {} ({}) VALUES ({})'.format(table_name, cols, placeholders)
+                cols = ", ".join(item.keys())
+                placeholders = ", ".join("?" * len(item))
+                sql = "INSERT INTO {} ({}) VALUES ({})".format(
+                    table_name, cols, placeholders
+                )
                 conn.execute(sql, tuple(item.values()))
             elif is_namedtuple(item):
-                cols = ', '.join(item._fields)
-                placeholders = ', '.join('?' * len(item))
-                sql = 'INSERT INTO {} ({}) VALUES ({})'.format(table_name, cols, placeholders)
+                cols = ", ".join(item._fields)
+                placeholders = ", ".join("?" * len(item))
+                sql = "INSERT INTO {} ({}) VALUES ({})".format(
+                    table_name, cols, placeholders
+                )
                 conn.execute(sql, item)
             elif isinstance(item, (list, tuple)):
-                placeholders = ', '.join('?' * len(item))
-                sql = 'INSERT INTO {} VALUES ({})'.format(table_name, placeholders)
+                placeholders = ", ".join("?" * len(item))
+                sql = "INSERT INTO {} VALUES ({})".format(table_name, placeholders)
                 conn.execute(sql, item)
             else:
-                raise TypeError('item must be one of dict, namedtuple, tuple or list got {}'
-                                .format(type(item)))
+                raise TypeError(
+                    "item must be one of dict, namedtuple, tuple or list got {}".format(
+                        type(item)
+                    )
+                )
 
         self.for_each(_insert_item)
 
@@ -1602,7 +1651,7 @@ class Sequence(object):
         :param kwargs: passed to sqlite3.connect
         """
         # pylint: disable=no-member
-        insert_regex = re.compile(r'(insert|update)\s+into', flags=re.IGNORECASE)
+        insert_regex = re.compile(r"(insert|update)\s+into", flags=re.IGNORECASE)
         if insert_regex.match(target):
             insert_f = self._to_sqlite3_by_query
         else:
@@ -1616,7 +1665,9 @@ class Sequence(object):
                 insert_f(input_conn, target)
                 input_conn.commit()
         else:
-            raise ValueError('conn must be a must be a file path or sqlite3 Connection/Cursor')
+            raise ValueError(
+                "conn must be a must be a file path or sqlite3 Connection/Cursor"
+            )
 
     def to_pandas(self, columns=None):
         # pylint: disable=import-error
@@ -1627,10 +1678,19 @@ class Sequence(object):
         :return: DataFrame of sequence
         """
         import pandas
+
         return pandas.DataFrame.from_records(self.to_list(), columns=columns)
 
-    def show(self, n=10, headers=(), tablefmt="simple", floatfmt="g", numalign="decimal",
-             stralign="left", missingval=""):
+    def show(
+        self,
+        n=10,
+        headers=(),
+        tablefmt="simple",
+        floatfmt="g",
+        numalign="decimal",
+        stralign="left",
+        missingval="",
+    ):
         """
         Pretty print first n rows of sequence as a table. See
         https://bitbucket.org/astanin/python-tabulate for details on tabulate parameters
@@ -1643,9 +1703,15 @@ class Sequence(object):
         :param stralign: Passed to tabulate
         :param missingval: Passed to tabulate
         """
-        formatted_seq = self.tabulate(n=n, headers=headers, tablefmt=tablefmt,
-                                      floatfmt=floatfmt, numalign=numalign, stralign=stralign,
-                                      missingval=missingval)
+        formatted_seq = self.tabulate(
+            n=n,
+            headers=headers,
+            tablefmt=tablefmt,
+            floatfmt=floatfmt,
+            numalign=numalign,
+            stralign=stralign,
+            missingval=missingval,
+        )
         print(formatted_seq)
 
     def _repr_html_(self):
@@ -1653,10 +1719,18 @@ class Sequence(object):
         Allows  IPython render HTML tables
         :return: First 10 rows of data as an HTML table
         """
-        return self.tabulate(10, tablefmt='html')
+        return self.tabulate(10, tablefmt="html")
 
-    def tabulate(self, n=None, headers=(), tablefmt="simple", floatfmt="g", numalign="decimal",
-                 stralign="left", missingval=""):
+    def tabulate(
+        self,
+        n=None,
+        headers=(),
+        tablefmt="simple",
+        floatfmt="g",
+        numalign="decimal",
+        stralign="left",
+        missingval="",
+    ):
         """
         Return pretty string table of first n rows of sequence or everything if n is None. See
         https://bitbucket.org/astanin/python-tabulate for details on tabulate parameters
@@ -1676,19 +1750,29 @@ class Sequence(object):
 
         if n is None or n >= length:
             rows = self.list()
-            message = ''
+            message = ""
         else:
             rows = self.take(n).list()
-            if tablefmt == 'simple':
-                message = '\nShowing {} of {} rows'.format(n, length)
-            elif tablefmt == 'html':
-                message = '<p>Showing {} of {} rows'.format(n, length)
+            if tablefmt == "simple":
+                message = "\nShowing {} of {} rows".format(n, length)
+            elif tablefmt == "html":
+                message = "<p>Showing {} of {} rows".format(n, length)
             else:
-                message = ''
+                message = ""
         if len(headers) == 0 and is_namedtuple(rows[0]):
             headers = rows[0]._fields
-        return tabulate(rows, headers=headers, tablefmt=tablefmt, floatfmt=floatfmt,
-                        numalign=numalign, stralign=stralign, missingval=missingval) + message
+        return (
+            tabulate(
+                rows,
+                headers=headers,
+                tablefmt=tablefmt,
+                floatfmt=floatfmt,
+                numalign=numalign,
+                stralign=stralign,
+                missingval=missingval,
+            )
+            + message
+        )
 
 
 def _wrap(value):
@@ -1712,18 +1796,20 @@ def _wrap(value):
         return value
     if isinstance(value, (dict, set)) or is_namedtuple(value):
         return value
-    elif isinstance(value, collections.Iterable):
+    elif isinstance(value, collections.abc.Iterable):
         try:
-            if type(value).__name__ == 'DataFrame':
+            if type(value).__name__ == "DataFrame":
                 import pandas
+
                 if isinstance(value, pandas.DataFrame):
                     return Sequence(value.values)
-        except ImportError: # pragma: no cover
+        except ImportError:  # pragma: no cover
             pass
 
         return Sequence(value)
     else:
         return value
+
 
 def extend(func=None, aslist=False, final=False, name=None, parallel=False):
     """
@@ -1780,9 +1866,9 @@ def extend(func=None, aslist=False, final=False, name=None, parallel=False):
             func_ = lambda seq: func(seq, *args, **kwargs)
 
         transform = transformations.Transformation(
-            'extended[{}]'.format(name or func.__name__),
+            "extended[{}]".format(name or func.__name__),
             func_,
-            {ExecutionStrategies.PARALLEL} if parallel else None
+            {ExecutionStrategies.PARALLEL} if parallel else None,
         )
         return self._transform(transform)
 

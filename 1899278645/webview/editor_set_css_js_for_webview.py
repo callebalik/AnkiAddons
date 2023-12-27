@@ -1,6 +1,3 @@
-# Copyright:  (c) 2019- ignd
-# License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
-
 import os
 
 from aqt import mw
@@ -48,9 +45,27 @@ def append_js_to_Editor(web_content, context):
         web_content.head += f"""\n<script>\n{rangy__create_global_variables_for_later_use()}\n</script>\n"""
 
 
-def append_css_to_Editor(web_content, context):
-    if isinstance(context, Editor):
-        web_content.head += f"""\n<style>\n{create_css_for_webviews_from_config()}\n</style>\n"""
+def append_css_to_Editor(js, note, editor) -> str:
+    newjs = js + ("""
+var userStyle = document.createElement("style");
+userStyle.rel = "stylesheet";
+userStyle.textContent = `USER_STYLE`;
+userStyle.id = "customStyles";
+
+forEditorField([], (field) => {
+    var sr = field.editingArea.shadowRoot;
+    var customStyles = sr.getElementById("customStyles");
+    if (customStyles) {
+        customStyles.parentElement.replaceChild(userStyle, customStyles)
+    }
+    else {
+        sr.insertBefore(userStyle.cloneNode(true), field.editingArea.editable)
+    }
+});
+
+""".replace("USER_STYLE", create_css_for_webviews_from_config()))
+
+    return newjs
 
 
 def js_inserter(self):
@@ -62,12 +77,11 @@ def js_inserter(self):
         # JS error :41 Uncaught TypeError: rangy.createHighlighter is not a function
 
     jsstring = """
-
 // https://stackoverflow.com/questions/5222814/window-getselection-return-html
 function selectionAsHtml() {
     var out = "";
-    if (typeof window.getSelection != "undefined") {
-        var sel = window.getSelection();
+    if (typeof getCurrentField().shadowRoot.getSelection != "undefined") {
+        var sel = getCurrentField().shadowRoot.getSelection();
         if (sel.rangeCount) {
             var helper_span = document.createElement("span");
             for (var i = 0, l = sel.rangeCount; i < l; ++i) {
@@ -84,40 +98,25 @@ function selectionAsHtml() {
     return out;
 }
 
-
-function classes_addon_wrap_span_helper(surrounding_span_tag_class){
-    const s = window.getSelection();
+var classes_addon_wrap = (elemName) => (surrounding_elem_tag_class) => {
+    debugger
+    const s = getCurrentField().shadowRoot.getSelection();
     let r = s.getRangeAt(0);
     const content = r.cloneContents();
     r.deleteContents();
-    const span = document.createElement("span");
-    if (surrounding_span_tag_class){
-        span.className = surrounding_span_tag_class;
+    const elem = document.createElement(elemName);
+    if (surrounding_elem_tag_class) {
+        elem.className = surrounding_elem_tag_class;
     }
-    span.appendChild(content);
-    r.insertNode(span);
-    saveField('key');
+    elem.appendChild(content);
+    r.insertNode(elem);
+    saveNow(true);
 }
 
+var classes_addon_wrap_span_helper = classes_addon_wrap("span")
+var classes_addon_wrap_helper = classes_addon_wrap("div")
 
-
-
-
-function classes_addon_wrap_helper(surrounding_div_tag_class){
-    const s = window.getSelection();
-    let r = s.getRangeAt(0);
-    const content = r.cloneContents();
-    r.deleteContents();
-    const div = document.createElement("div");
-    if (surrounding_div_tag_class){
-        div.className = surrounding_div_tag_class;
-    }
-    div.appendChild(content);
-    r.insertNode(div);
-    saveField('key');
-}
-
-var injectScript = (src) => {
+function injectScript(src) {
     return new Promise((resolve, reject) => {
         const script = document.createElement('script');
         script.src = src;
@@ -127,7 +126,6 @@ var injectScript = (src) => {
         document.head.appendChild(script);
     });
 };
-
 
 $(document).ready(function(){
     (async () => {
@@ -146,8 +144,6 @@ $(document).ready(function(){
         focusField(0);
     })();
 });
-
-
 """.replace("PORTPORT", str(mw.mediaServer.getPort()))\
    .replace("NAMENAME", __name__.split('.', 1)[0])\
    .replace("HIGHLIGHTERS", rangy_higlighters_for_each_class())\

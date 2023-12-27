@@ -7,7 +7,10 @@ from ..anki.adapters.note_model_file_provider import NoteModelFileProvider
 
 
 def from_collection(collection, name, deck_metadata=None, is_child=False) -> Deck:
-    anki_dict = collection.decks.byName(name)
+    decks = collection.decks
+    # TODO Remove compatibility shims for Anki 2.1.46 and lower.
+    by_name = decks.by_name if hasattr(decks, 'by_name') else decks.byName
+    anki_dict = by_name(name)
 
     if AnkiDeck(anki_dict).is_dynamic:
         return None
@@ -20,7 +23,7 @@ def from_collection(collection, name, deck_metadata=None, is_child=False) -> Dec
 
     deck.notes = Note.get_notes_from_collection(collection, deck.anki_dict["id"], deck.metadata.models)
 
-    direct_children = [child_name for child_name, _ in collection.decks.children(deck.anki_dict["id"])
+    direct_children = [child_name for child_name, _ in decks.children(deck.anki_dict["id"])
                        if Deck.DECK_NAME_DELIMITER
                        not in child_name[len(name) + len(Deck.DECK_NAME_DELIMITER):]]
 
@@ -44,7 +47,6 @@ def from_json(json_dict, deck_metadata=None) -> Deck:
     deck.notes = [Note.from_json(json_note) for json_note in json_dict["notes"]]
     deck.children = [from_json(child, deck_metadata=deck.metadata) for child in json_dict["children"]]
 
-    # Todo should I call this here?
     deck.post_import_filter()
 
     return deck

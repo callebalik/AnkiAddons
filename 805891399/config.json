@@ -1,13 +1,7 @@
 {
-    "Ckeditor4 - enable": false,
-    "Ckeditor4 - shortcut to open dialog": "",
-    "Ckeditor4 (old version) - enable": false,
-    "Ckeditor4 (old version) - shortcut to open dialog": "",
-    "TinyMCE4 - enable": false,
-    "TinyMCE4 - shortcut to open dialog": "",
-    "TinyMCE5 - enable": true,  
-    "TinyMCE5 - shortcut to open dialog": "Ctrl+0",
+    "shortcut to open default dialog": "Ctrl+0",
     "font": "Times New Roman",
     "fontSize": "20",
-    "show background color buttons": false
+    "TinyMCE6-toolbar1": "undo redo fontfamily blocks alignleft aligncenter alignright alignjustify link unlink charmap cleanup nextCloze sameCloze code codesample",
+    "TinyMCE6-toolbar2": "bold italic underline strikethrough superscript subscript forecolor backcolor removeformat hr blockquote numlist bullist anchor outdent indent table ltr rtl"
 }

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 # vim:ts=4:sw=4:softtabstop=4:smarttab:expandtab
 
 # Copyright (c) 2020 Kevin B. Hendricks, Stratford Ontario Canada
@@ -7,55 +6,67 @@
 #
 # This diffstat code was extracted and heavily modified from:
 #
-#    https://github.com/techtonik/python-patch
-#        Under the following license:
+#  https://github.com/techtonik/python-patch
+#      Under the following license:
 #
-#    Patch utility to apply unified diffs
-#    Brute-force line-by-line non-recursive parsing
+#  Patch utility to apply unified diffs
+#  Brute-force line-by-line non-recursive parsing
 #
-#    Copyright (c) 2008-2016 anatoly techtonik
-#    Available under the terms of MIT license
+# Copyright (c) 2008-2016 anatoly techtonik
 #
-# and falls under the exact same MIT license
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
-import sys
 import re
+import sys
+from typing import List, Optional, Tuple
 
 # only needs to detect git style diffs as this is for
 # use with dulwich
 
-_git_header_name = re.compile(br'diff --git a/(.*) b/(.*)')
+_git_header_name = re.compile(br"diff --git a/(.*) b/(.*)")
 
-_GIT_HEADER_START = b'diff --git a/'
-_GIT_BINARY_START = b'Binary file'
-_GIT_RENAMEFROM_START = b'rename from'
-_GIT_RENAMETO_START = b'rename to'
-_GIT_CHUNK_START = b'@@'
-_GIT_ADDED_START = b'+'
-_GIT_DELETED_START = b'-'
-_GIT_UNCHANGED_START = b' '
+_GIT_HEADER_START = b"diff --git a/"
+_GIT_BINARY_START = b"Binary file"
+_GIT_RENAMEFROM_START = b"rename from"
+_GIT_RENAMETO_START = b"rename to"
+_GIT_CHUNK_START = b"@@"
+_GIT_ADDED_START = b"+"
+_GIT_DELETED_START = b"-"
+_GIT_UNCHANGED_START = b" "
 
 # emulate original full Patch class by just extracting
 # filename and minimal chunk added/deleted information to
 # properly interface with diffstat routine
 
 
-def _parse_patch(lines):
-    """An internal routine to parse a git style diff or patch to generate
-       diff stats
+def _parse_patch(lines: List[bytes]) -> Tuple[List[bytes], List[bool], List[Tuple[int, int]]]:
+    """Parse a git style diff or patch to generate diff stats.
+
     Args:
-      lines: list of byte strings "lines" from the diff to be parsed
-    Returns: A tuple (names, nametypes, counts) of three lists:
-             names = list of repo relative file paths
-             nametypes - list of booolean values indicating if file
-                         is binary (True means binary file)
-             counts = list of tuples of (added, deleted) counts for that file
+      lines: list of byte string lines from the diff to be parsed
+    Returns: A tuple (names, is_binary, counts) of three lists
     """
     names = []
     nametypes = []
     counts = []
     in_patch_chunk = in_git_header = binaryfile = False
-    currentfile = None
+    currentfile: Optional[bytes] = None
     added = deleted = 0
     for line in lines:
         if line.startswith(_GIT_HEADER_START):
@@ -63,7 +74,9 @@ def _parse_patch(lines):
                 names.append(currentfile)
                 nametypes.append(binaryfile)
                 counts.append((added, deleted))
-            currentfile = _git_header_name.search(line).group(2)
+            m = _git_header_name.search(line)
+            assert m
+            currentfile = m.group(2)
             binaryfile = False
             added = deleted = 0
             in_git_header = True
@@ -74,9 +87,9 @@ def _parse_patch(lines):
         elif line.startswith(_GIT_RENAMEFROM_START) and in_git_header:
             currentfile = line[12:]
         elif line.startswith(_GIT_RENAMETO_START) and in_git_header:
-            currentfile += b' => %s' % line[10:]
-        elif line.startswith(_GIT_CHUNK_START) and \
-                (in_patch_chunk or in_git_header):
+            assert currentfile
+            currentfile += b" => %s" % line[10:]
+        elif line.startswith(_GIT_CHUNK_START) and (in_patch_chunk or in_git_header):
             in_patch_chunk = True
             in_git_header = False
         elif line.startswith(_GIT_ADDED_START) and in_patch_chunk:
@@ -115,8 +128,8 @@ def diffstat(lines, max_width=80):
         insert.append(i)
         delete.append(d)
         namelen = max(namelen, len(filename))
-        maxdiff = max(maxdiff, i+d)
-    output = b''
+        maxdiff = max(maxdiff, i + d)
+    output = b""
     statlen = len(str(maxdiff))  # stats column width
     for i, n in enumerate(names):
         binaryfile = nametypes[i]
@@ -124,16 +137,21 @@ def diffstat(lines, max_width=80):
         # note b'%d' % namelen is not supported until Python 3.5
         # To convert an int to a format width specifier for byte
         # strings use str(namelen).encode('ascii')
-        format = b' %-' + str(namelen).encode('ascii') + \
-            b's | %' + str(statlen).encode('ascii') + b's %s\n'
-        binformat = b' %-' + str(namelen).encode('ascii') + b's | %s\n'
+        format = (
+            b" %-"
+            + str(namelen).encode("ascii")
+            + b"s | %"
+            + str(statlen).encode("ascii")
+            + b"s %s\n"
+        )
+        binformat = b" %-" + str(namelen).encode("ascii") + b"s | %s\n"
         if not binaryfile:
-            hist = b''
+            hist = b""
             # -- calculating histogram --
-            width = len(format % (b'', b'', b''))
+            width = len(format % (b"", b"", b""))
             histwidth = max(2, max_width - width)
             if maxdiff < histwidth:
-                hist = b'+'*insert[i] + b'-'*delete[i]
+                hist = b"+" * insert[i] + b"-" * delete[i]
             else:
                 iratio = (float(insert[i]) / maxdiff) * histwidth
                 dratio = (float(delete[i]) / maxdiff) * histwidth
@@ -150,34 +168,39 @@ def diffstat(lines, max_width=80):
                     dwidth = int(dratio)
                     if dwidth == 0 and 0 < dratio < 1:
                         dwidth = 1
-                hist = b'+'*int(iwidth) + b'-'*int(dwidth)
-            output += (format % (bytes(names[i]),
-                                 str(insert[i] + delete[i]).encode('ascii'),
-                                 hist))
+                hist = b"+" * int(iwidth) + b"-" * int(dwidth)
+            output += format % (
+                bytes(names[i]),
+                str(insert[i] + delete[i]).encode("ascii"),
+                hist,
+            )
         else:
-            output += (binformat % (bytes(names[i]), b'Bin'))
+            output += binformat % (bytes(names[i]), b"Bin")
 
-    output += (b' %d files changed, %d insertions(+), %d deletions(-)'
-               % (len(names), sum(insert), sum(delete)))
+    output += b" %d files changed, %d insertions(+), %d deletions(-)" % (
+        len(names),
+        sum(insert),
+        sum(delete),
+    )
     return output
 
 
 def main():
     argv = sys.argv
-    # allow diffstat.py to also be used from the comand line
+    # allow diffstat.py to also be used from the command line
     if len(sys.argv) > 1:
         diffpath = argv[1]
-        data = b''
-        with open(diffpath, 'rb') as f:
+        data = b""
+        with open(diffpath, "rb") as f:
             data = f.read()
-        lines = data.split(b'\n')
+        lines = data.split(b"\n")
         result = diffstat(lines)
-        print(result.decode('utf-8'))
+        print(result.decode("utf-8"))
         return 0
 
     # if no path argument to a diff file is passed in, run
     # a self test. The test case includes tricky things like
-    # a diff of diff, binary files, renames with futher changes
+    # a diff of diff, binary files, renames with further changes
     # added files and removed files.
     # All extracted from Sigil-Ebook/Sigil's github repo with
     # full permission to use under this license.
@@ -299,27 +322,27 @@ index 3b41fd80..64914c78 100644
  2. open Sigil.app to the normal nearly blank template epub it generates when opened
  3. use Plugins->Manage Plugins menu and make sure the "Use Bundled Python" checkbox is checked
  4. use the "Add Plugin" button to navigate to and add testplugin.zip and then hit "Okay" to exit the Manage Plugins Dialog
-"""     # noqa: E501 W293
+"""
 
     testoutput = b""" docs/qt512.7_remove_bad_workaround.patch            | 15 ++++++++++++
  docs/testplugin_v017.zip                            | Bin
  ci_scripts/macgddeploy.py => ci_scripts/gddeploy.py |  0 
  docs/qt512.6_backport_009abcd_fix.patch             | 26 ---------------------
  docs/Building_Sigil_On_MacOSX.txt                   |  2 +-
- 5 files changed, 16 insertions(+), 27 deletions(-)"""  # noqa: W291
+ 5 files changed, 16 insertions(+), 27 deletions(-)"""
 
     # return 0 on success otherwise return -1
-    result = diffstat(selftest.split(b'\n'))
+    result = diffstat(selftest.split(b"\n"))
     if result == testoutput:
         print("self test passed")
         return 0
     print("self test failed")
     print("Received:")
-    print(result.decode('utf-8'))
+    print(result.decode("utf-8"))
     print("Expected:")
-    print(testoutput.decode('utf-8'))
+    print(testoutput.decode("utf-8"))
     return -1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

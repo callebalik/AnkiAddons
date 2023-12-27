@@ -1,32 +1,37 @@
 import copy
 import webbrowser
+
 import aqt
 from anki.consts import *
-from anki.utils import json
 from aqt import mw
 from aqt.qt import *
-from aqt.utils import askUser, getOnlyText, openHelp, showInfo, showWarning
+from aqt.utils import getOnlyText, showInfo, showWarning
 
-from .config import getDefaultConfig, getUserOption, writeConfig
+from .config import getUserOption
 
 # #########################################################
 #
-# See this video for how to use this add-on: https://youtu.be/cg-tQ6Ut0IQ
+# See this video for how to use this add-on: https://youtu.be/TTHpODHBk3U
 #
 # #########################################################
-
 
 
 fullconfig = getUserOption()
 configs = getUserOption("configs")
 
+if "Protected tags" not in configs["current config"]:
+    configs["current config"]["Protected tags"] = ["%%keep%%"]
+    configs["user default config"]["Protected tags"] = ["%%keep%%"]
+    mw.addonManager.writeConfig(__name__, fullconfig)
+
+KEEPTAGTEXT = configs["current config"]["Protected tags"]
+
 addon = __name__.split(".")[0]
 
 
 class FieldDialog(QDialog):
-
     def __init__(self, mw, fields, ord=0, parent=None):
-        QDialog.__init__(self, parent or mw)  # , Qt.Window)
+        QDialog.__init__(self, parent or mw)  # , Qt.WindowType.Window)
         self.specialFields = fields
 
         self.mw = aqt.mw
@@ -37,35 +42,35 @@ class FieldDialog(QDialog):
         self.form = aqt.forms.fields.Ui_Dialog()
         self.form.setupUi(self)
         self.setWindowTitle(_("Special Fields"))
-        self.form.buttonBox.button(QDialogButtonBox.Help).setAutoDefault(False)
-        if self.form.buttonBox.button(QDialogButtonBox.Close):
-            self.form.buttonBox.button(QDialogButtonBox.Close).setAutoDefault(False)
+        self.form.buttonBox.button(QDialogButtonBox.StandardButton.Help).setAutoDefault(False)
+        if self.form.buttonBox.button(QDialogButtonBox.StandardButton.Close):
+            self.form.buttonBox.button(QDialogButtonBox.StandardButton.Close).setAutoDefault(False)
         else:
-            self.form.buttonBox.button(QDialogButtonBox.Close)
+            self.form.buttonBox.button(QDialogButtonBox.StandardButton.Close)
         self.currentIdx = None
         self.fillFields()
         self.setupSignals()
         self.form.fieldList.setCurrentRow(0)
 
-        self.setupOptions()
-        # self.form.buttonBox.button(QRadioButton("Upload Collection", self))
-        # self.upload_but.clicked.connect(self.uploadBut)
-
         # removing irrelevant stuff from general "fields.ui" template
-        # self.form._2.setParent(None)
-        self.form.rtl.setParent(None)
-        self.form.fontFamily.setParent(None)
-        self.form.fontSize.setParent(None)
-        self.form.sticky.setParent(None)
-        self.form.label_18.setParent(None)
-        self.form.fontFamily.setParent(None)
+        for r in reversed(range(self.form._2.count())):
+            # reversed because removing item afrom start shifts the other items forward
+            item = self.form._2.itemAt(r)
+            item.widget().setParent(None)
         self.form.fieldRename.setParent(None)
         self.form.fieldPosition.setParent(None)
-        self.form.label_5.setParent(None)
-        self.form.sortField.setParent(None)
+
+        try:
+            self.form.label_5.setParent(None)
+        except AttributeError:
+            pass  # Do nothing, there is no label_5 in Anki >= 2.1.50
+
+        self.setupOptions()
+        self.getTagsText()
+
         self.resize(500, 300)
 
-        self.exec_()
+        self.exec()
 
     ##########################################################################
     def setupOptions(self):
@@ -76,37 +81,52 @@ class FieldDialog(QDialog):
         updateStyle = configs["current config"]["update note styling"]
         upOnlyIfNewer = configs["current config"]["update only if newer"]
 
+        global KEEPTAGTEXT
+
         self.b1 = QCheckBox("All fields are special", self)
-        self.form._2.addWidget(self.b1)
+        self.form._2.addWidget(self.b1, 0, 0)
         self.b1.setChecked(allSpecial)
 
         self.b2 = QCheckBox("Combine tagging", self)
-        self.form._2.addWidget(self.b2)
+        self.form._2.addWidget(self.b2, 0, 1)
         self.b2.setChecked(combTaging)
 
         self.b3 = QCheckBox("Update deck description", self)
-        self.form._2.addWidget(self.b3)
+        self.form._2.addWidget(self.b3, 0, 2)
         self.b3.setChecked(updateDesc)
 
         self.b4 = QCheckBox("Update note styling", self)
-        self.form._2.addWidget(self.b4)
+        self.form._2.addWidget(self.b4, 1, 0)
         self.b4.setChecked(updateStyle)
 
         self.b5 = QCheckBox("Update only if newer", self)
-        self.form._2.addWidget(self.b5)
+        self.form._2.addWidget(self.b5, 1, 1)
         self.b5.setChecked(upOnlyIfNewer)
 
         self.b6 = QPushButton("Set Defaults", self)
-        self.form._2.addWidget(self.b6)
+        self.form._2.addWidget(self.b6, 1, 2)
 
         self.b7 = QPushButton("'Update' Settings", self)
-        self.form._2.addWidget(self.b7)
+        self.form._2.addWidget(self.b7, 2, 0)
 
         self.b8 = QPushButton("'Import Tags' Settings", self)
-        self.form._2.addWidget(self.b8)
+        self.form._2.addWidget(self.b8, 2, 1)
 
         self.b9 = QPushButton("Restore Defaults", self)
-        self.form._2.addWidget(self.b9)
+        self.form._2.addWidget(self.b9, 2, 2)
+
+        self.l1 = QLabel("<div style='font-weight: bold'>Protected Tags: </div>", self)
+        self.l1.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.form._2.addWidget(self.l1, 3, 0)
+        self.l1.setToolTip(
+            f'<div style="background:red;">When updating, all tags except those containing these phrases will be updated (separate multiple terms by a space - case sensitive!)</div>'
+        )
+
+        self.t1 = QLineEdit(self)
+        KEEPTAGSTRING = " ".join(str(elem) for elem in KEEPTAGTEXT)
+        self.t1.setText(KEEPTAGSTRING)
+        self.form._2.addWidget(self.t1, 3, 1, 1, 2)
+        self.t1.textChanged.connect(self.getTagsText)
 
         self.b1.clicked.connect(self.b1_press)
         self.b2.clicked.connect(self.b2_press)
@@ -118,6 +138,18 @@ class FieldDialog(QDialog):
         self.b8.clicked.connect(self.importPresetConfig)
         self.b9.clicked.connect(self.restoreConfig)  # change this class
 
+    def getTagsText(self):
+        global KEEPTAGTEXT
+        val = self.t1.text()
+        KEEPTAGTEXT = [v for v in val.split(" ") if v]
+        configs["current config"]["Protected tags"] = KEEPTAGTEXT
+        mw.addonManager.writeConfig(__name__, fullconfig)
+        # showInfo("done")
+
+    def returnTagsText(self):
+        self.getTagsText()
+        return KEEPTAGTEXT
+
     def fillFields(self):
         self.currentIdx = None
         self.form.fieldList.clear()
@@ -125,8 +157,7 @@ class FieldDialog(QDialog):
         fields = configs["current config"]["Special field"]
 
         for c, f in enumerate(fields):
-            self.form.fieldList.addItem("{}: {}".format(c+1, f
-                                                        ))
+            self.form.fieldList.addItem("{}: {}".format(c + 1, f))
 
     def setupSignals(self):
         f = self.form
@@ -161,9 +192,7 @@ class FieldDialog(QDialog):
         mw.addonManager.writeConfig(__name__, fullconfig)
 
     def restoreConfig(self):
-        addon = __name__.split(".")[0]
-        configs["current config"] = copy.deepcopy(
-            configs["user default config"])
+        configs["current config"] = copy.deepcopy(configs["user default config"])
 
         mw.addonManager.writeConfig(__name__, fullconfig)
 
@@ -172,19 +201,21 @@ class FieldDialog(QDialog):
         updateDesc = configs["current config"]["update deck description"]
         updateStyle = configs["current config"]["update note styling"]
         upOnlyIfNewer = configs["current config"]["update only if newer"]
+        global KEEPTAGTEXT
+        KEEPTAGTEXT = configs["current config"]["Protected tags"]
 
         self.b1.setChecked(allSpecial)
         self.b2.setChecked(combTaging)
         self.b3.setChecked(updateDesc)
         self.b4.setChecked(updateStyle)
         self.b5.setChecked(upOnlyIfNewer)
+        # self.t1.setText(KEEPTAGTEXT)
         showInfo("Settings Restored")
         self.close()
         onFieldsExecute()
 
     def setConfig(self):
-        configs["user default config"] = copy.deepcopy(
-            configs["current config"])
+        configs["user default config"] = copy.deepcopy(configs["current config"])
         mw.addonManager.writeConfig(__name__, fullconfig)
 
         allSpecial = configs["current config"]["All fields are special"]
@@ -192,12 +223,15 @@ class FieldDialog(QDialog):
         updateDesc = configs["current config"]["update deck description"]
         updateStyle = configs["current config"]["update note styling"]
         upOnlyIfNewer = configs["current config"]["update only if newer"]
+        global KEEPTAGTEXT
+        KEEPTAGTEXT = configs["current config"]["Protected tags"]
 
         self.b1.setChecked(allSpecial)
         self.b2.setChecked(combTaging)
         self.b3.setChecked(updateDesc)
         self.b4.setChecked(updateStyle)
         self.b5.setChecked(upOnlyIfNewer)
+        # self.t1.setText(KEEPTAGTEXT)
         showInfo("Settings Restored")
         self.close()
         onFieldsExecute()
@@ -233,7 +267,7 @@ class FieldDialog(QDialog):
         showInfo("Settings applied for importing tags")
 
     def updatePresetConfig(self):
-        addon = __name__.split(".")[0]
+        # addon = __name__.split(".")[0]
         # mw.addonManager.writeAddonMeta(addon, conf)
 
         configs["current config"]["All fields are special"] = False
@@ -287,7 +321,7 @@ class FieldDialog(QDialog):
         self.fillFields()
         fields = configs["current config"]["Special field"]
         self.specialFields = fields
-        self.form.fieldList.setCurrentRow(len(self.specialFields)-1)
+        self.form.fieldList.setCurrentRow(len(self.specialFields) - 1)
         mw.addonManager.writeConfig(__name__, fullconfig)
 
     def onDelete(self):
@@ -302,14 +336,16 @@ class FieldDialog(QDialog):
         if self.currentIdx is None:
             return
 
-        fields = configs["current config"]["Special field"]
-        fields = self.specialFields
         mw.addonManager.writeConfig(__name__, fullconfig)
 
     def onHelp(self):
-        #openHelp("fields")
-        webbrowser.open('https://youtu.be/cg-tQ6Ut0IQ')
+        # openHelp("fields")
+        webbrowser.open("https://youtu.be/TTHpODHBk3U")
 
+
+def returnTagsText():
+    global KEEPTAGTEXT
+    return KEEPTAGTEXT
 
 
 def onFields(self):

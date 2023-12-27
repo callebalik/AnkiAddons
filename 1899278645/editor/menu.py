@@ -1,33 +1,14 @@
-"""
-Copyright:  (c) 2019- ignd
-            (c) Glutanimate 2015-2017
-License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
-Use this at your own risk
-"""
-
-import os
-from pprint import pprint as pp
-
-from PyQt5.QtGui import (
-    QCursor,
-    QFont,
-    QPixmap,
-) 
-from PyQt5.QtWidgets import (
-    QMenu,
-    QLabel,
-    QWidgetAction
-)
+from os.path import join
 
 from aqt import mw
+from aqt.qt import QCursor, QFont, QPixmap, QMenu, QLabel, QWidgetAction
 from aqt.editor import Editor
 
 from ..config_var import getconfig
 from ..colors import hex_to_rgb_string
 
-from .contextmenu import co_hex_to_rgb
-from .editor_rangy_helpers import classes_addon_rangy_remove_all
-from .editor_apply_categories import apply_categories
+from .rangy_helpers import classes_addon_rangy_remove_all
+from .apply_categories import apply_categories
 
 
 def my_highlight_helper(editor, category, setting):
@@ -51,13 +32,13 @@ def return_stylesheet(editor, e):
         thiscolor = hex_to_rgb_string(e['Setting'])
         line1 = "background-color: rgba({}); ".format(thiscolor)
     elif e['Category'] == 'Backcolor (via class)':
-        thiscolor = co_hex_to_rgb(e['Text_in_menu_styling'])
+        thiscolor = hex_to_rgb_string(e['Text_in_menu_styling'])
         line1 = "background-color: rgba({}); ".format(thiscolor)
     elif e['Category'] == 'Forecolor':
         thiscolor = hex_to_rgb_string(e['Setting'])
         line1 = "color: rgba({}); ".format(thiscolor)
     elif e['Category'] == 'Forecolor (via class)':
-        thiscolor = co_hex_to_rgb(e['Text_in_menu_styling'])
+        thiscolor = hex_to_rgb_string(e['Text_in_menu_styling'])
         line1 = "color: rgba({}); ".format(thiscolor)
     else:
         line1 = e['Text_in_menu_styling']
@@ -109,7 +90,7 @@ Editor.my_label_text = my_label_text
 def create_menu_entry(editor, e, parentmenu):
     if e.get('IconInMenu', False):
         y = QLabel()
-        path = os.path.join(icon_path, e['IconInMenu'])
+        path = join(icon_path, e['IconInMenu']) # never defined!!!!
         pixmap = QPixmap(path)
         y.setPixmap(pixmap)
     else:

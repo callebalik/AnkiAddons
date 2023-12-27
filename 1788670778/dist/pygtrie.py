@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Implementation of a trie data structure.
+"""Pure Python implementation of a trie data structure compatible with Python
+2.x and Python 3.x.
 
 `Trie data structure <http://en.wikipedia.org/wiki/Trie>`_, also known as radix
 or prefix tree, is a tree associating keys to values where all the descendants
@@ -41,11 +42,10 @@ from __future__ import absolute_import, division, print_function
 __author__ = 'Michal Nazarewicz <mina86@mina86.com>'
 __copyright__ = ('Copyright 2014-2017 Google LLC',
                  'Copyright 2018-2020 Michal Nazarewicz <mina86@mina86.com>')
-__version__ = '2.3.3'
+__version__ = '2.5.0'
 
 
 import copy as _copy
-import operator as _operator
 try:
     import collections.abc as _abc
 except ImportError:  # Python 2 compatibility
@@ -96,8 +96,8 @@ class _NoChildren(object):
     def __deepcopy__(self, memo):
         return self
 
-    # delete and pick_child are not implemented on purpose since
-    # they should never be called on a node with no children.
+    # delete is not implemented on purpose since it should never be called on
+    # a node with no children.
 
 
 _EMPTY = _NoChildren()
@@ -135,11 +135,18 @@ class _OneChild(object):
     def require(self, parent, step):
         return self.node if self.step == step else self.add(parent, step)
 
+    def merge(self, other, queue):
+        """Moves children from other into this object."""
+        if type(other) == _OneChild and other.step == self.step:
+            queue.append((self.node, other.node))
+            return self
+        else:
+            children = _Children((self.step, self.node))
+            children.merge(other, queue)
+            return children
+
     def delete(self, parent, _step):
         parent.children = _EMPTY
-
-    def pick_child(self):
-        return (self.step, self.node)
 
     def copy(self, make_copy, queue):
         cpy = _OneChild(make_copy(self.step), self.node.shallow_copy(make_copy))
@@ -174,13 +181,18 @@ class _Children(dict):
     def require(self, _parent, step):
         return self.setdefault(step, _Node())
 
+    def merge(self, other, queue):
+        """Moves children from other into this object."""
+        for step, other_node in other.iteritems():
+            node = self.setdefault(step, other_node)
+            if node is not other_node:
+                queue.append((node, other_node))
+        return self
+
     def delete(self, parent, step):
         del self[step]
         if len(self) == 1:
             parent.children = _OneChild(*self.popitem())
-
-    def pick_child(self):
-        return next(self.iteritems())
 
     def copy(self, make_copy, queue):
         cpy = _Children()
@@ -200,6 +212,24 @@ class _Node(object):
     def __init__(self):
         self.children = _EMPTY
         self.value = _EMPTY
+
+    def merge(self, other, overwrite):
+        """Move children from other node into this one.
+
+        Args:
+            other: Other node to move children and value from.
+            overwrite: Whether to overwrite existing node values.
+        """
+        queue = [(self, other)]
+        while queue:
+            lhs, rhs = queue.pop()
+            if lhs.value is _EMPTY or (overwrite and rhs.value is not _EMPTY):
+                lhs.value = rhs.value
+            if lhs.children is _EMPTY:
+                lhs.children = rhs.children
+            elif rhs.children is not _EMPTY:
+                lhs.children = lhs.children.merge(rhs.children, queue)
+            rhs.children = _EMPTY
 
     def iterate(self, path, shallow, iteritems):
         """Yields all the nodes with values associated to them in the trie.
@@ -261,18 +291,15 @@ class _Node(object):
             correspondence between original nodes in the trie and constructed
             nodes (see make_test_node_and_compress in test.py).
         """
-        def children():
-            """Recursively traverses all of node's children."""
-            for step, node in iteritems(self.children):
-                yield node.traverse(node_factory, path_conv, path + [step],
-                                    iteritems)
+        children = self.children and (
+            node.traverse(node_factory, path_conv, path + [step], iteritems)
+            for step, node in iteritems(self.children))
 
-        args = [path_conv, tuple(path), children()]
-
+        value_maybe = ()
         if self.value is not _EMPTY:
-            args.append(self.value)
+            value_maybe = (self.value,)
 
-        return node_factory(*args)
+        return node_factory(path_conv, tuple(path), children, *value_maybe)
 
     def equals(self, other):
         """Returns whether this and other node are recursively equal."""
@@ -282,7 +309,7 @@ class _Node(object):
         while True:
             if a.value != b.value or len(a.children) != len(b.children):
                 return False
-            elif len(a.children) == 1:
+            if len(a.children) == 1:
                 # We know a.children and b.children are both _OneChild objects
                 # but pylint doesn’t recognise that: pylint: disable=no-member
                 if a.children.step != b.children.step:
@@ -290,7 +317,7 @@ class _Node(object):
                 a = a.children.node
                 b = b.children.node
                 continue
-            elif a.children:
+            if a.children:
                 stack.append((a.children.iteritems(), b.children))
 
             while True:
@@ -432,21 +459,10 @@ class Trie(_abc.MutableMapping):
         them.
         """
         self._root = _Node()
-        self._sorted = False
+        self._iteritems = self._ITERITEMS_CALLBACKS[0]
         self.update(*args, **kwargs)
 
-    @property
-    def _iteritems(self):
-        """Returns function returning iterable over items of its argument.
-
-        Returns:
-            A function which returns an iterable over items in a dictionary
-            passed to it as an argument.  If child nodes sorting has been
-            enabled (via :func:`Trie.enable_sorting` method), returned function
-            will go through the items in sorted order.
-        """
-        return _operator.methodcaller(
-            'sorted_items' if self._sorted else 'iteritems')
+    _ITERITEMS_CALLBACKS = (lambda x: x.iteritems(), lambda x: x.sorted_items())
 
     def enable_sorting(self, enable=True):
         """Enables sorting of child nodes when iterating and traversing.
@@ -458,7 +474,7 @@ class Trie(_abc.MutableMapping):
 
         For Trie class, enabling sorting of children is identical to simply
         sorting the list of items since Trie returns keys as tuples.  However,
-        for other implementations such as StringTrie the two may behove subtly
+        for other implementations such as StringTrie the two may behave subtly
         different.  For example, sorting items might produce::
 
             root/foo-bar
@@ -469,13 +485,25 @@ class Trie(_abc.MutableMapping):
         Args:
             enable: Whether to enable sorting of child nodes.
         """
-        self._sorted = bool(enable)
+        self._iteritems = self._ITERITEMS_CALLBACKS[bool(enable)]
+
+    def __getstate__(self):
+        # encode self._iteritems as self._sorted when pickling
+        state = self.__dict__.copy()
+        callback = state.pop('_iteritems', None)
+        state['_sorted'] = callback is self._ITERITEMS_CALLBACKS[1]
+        return state
+
+    def __setstate__(self, state):
+        # translate self._sorted back to _iteritems when unpickling
+        self.__dict__ = state
+        self.enable_sorting(state.pop('_sorted'))
 
     def clear(self):
         """Removes all the values from the trie."""
         self._root = _Node()
 
-    def update(self, *args, **kwargs):
+    def update(self, *args, **kwargs):  # pylint: disable=arguments-differ
         """Updates stored values.  Works like :meth:`dict.update`."""
         if len(args) > 1:
             raise ValueError('update() takes at most one positional argument, '
@@ -491,6 +519,55 @@ class Trie(_abc.MutableMapping):
                 self[key] = value
             args = ()
         super(Trie, self).update(*args, **kwargs)
+
+    def merge(self, other, overwrite=False):
+        """Moves nodes from other trie into this one.
+
+        The merging happens at trie structure level and as such is different
+        than iterating over items of one trie and setting them in the other
+        trie.
+
+        The merging may happen between different types of tries resulting in
+        different (key, value) pairs in the destination trie compared to the
+        source.  For example, merging two :class:`pygtrie.StringTrie` objects
+        each using different separators will work as if the other trie had
+        separator of this trie.  Similarly, a :class:`pygtrie.CharTrie` may be
+        merged into a :class:`pygtrie.StringTrie` but when keys are read those
+        will be joined by the separator.  For example:
+
+            >>> import pygtrie
+            >>> st = pygtrie.StringTrie(separator='.')
+            >>> st.merge(pygtrie.StringTrie({'foo/bar': 42}))
+            >>> list(st.items())
+            [('foo.bar', 42)]
+            >>> st.merge(pygtrie.CharTrie({'baz': 24}))
+            >>> sorted(st.items())
+            [('b.a.z', 24), ('foo.bar', 42)]
+
+        Not all tries can be merged into other tries.  For example,
+        a :class:`pygtrie.StringTrie` may not be merged into
+        a :class:`pygtrie.CharTrie` because the latter imposes a requirement for
+        each component in the key to be exactly one character while in the
+        former components may be arbitrary length.
+
+        Note that the other trie is cleared and any references or iterators over
+        it are invalidated.  To preserve other’s value it needs to be copied
+        first.
+
+        Args:
+            other: Other trie to move nodes from.
+            overwrite: Whether to overwrite existing values in this trie.
+        """
+        if isinstance(self, type(other)):
+            self._merge_impl(self, other, overwrite=overwrite)
+        else:
+            other._merge_impl(self, other, overwrite=overwrite) # pylint: disable=protected-access
+        other.clear()
+
+    @classmethod
+    def _merge_impl(cls, dst, src, overwrite):
+        # pylint: disable=protected-access
+        dst._root.merge(src._root, overwrite=overwrite)
 
     def copy(self, __make_copy=lambda x: x):
         """Returns a shallow copy of the object."""
@@ -893,49 +970,36 @@ class Trie(_abc.MutableMapping):
         if is_slice:
             node.children = _EMPTY
 
-    def setdefault(self, key, value=None):
+    def setdefault(self, key, default=None):
         """Sets value of a given node if not set already.  Also returns it.
 
         In contrast to :func:`Trie.__setitem__`, this method does not accept
         slice as a key.
         """
-        return self._set_node(key, value, only_if_missing=True).value
+        return self._set_node(key, default, only_if_missing=True).value
 
     @staticmethod
-    def _cleanup_trace(trace):
-        """Removes empty nodes present on specified trace.
+    def _pop_value(trace):
+        """Removes value from given node and removes any empty nodes.
 
         Args:
             trace: Trace to the node to cleanup as returned by
-                :func:`Trie._get_node`.
+                :func:`Trie._get_node`.  The last element of the trace denotes
+                the node to get value of.
+
+        Returns:
+            Value which was held in the node at the end of specified trace.
+            This may be _EMPTY if the node didn’t have a value in the first
+            place.
         """
         i = len(trace) - 1  # len(path) >= 1 since root is always there
         step, node = trace[i]
+        value, node.value = node.value, _EMPTY
         while i and node.value is _EMPTY and not node.children:
             i -= 1
             parent_step, parent = trace[i]
             parent.children.delete(parent, step)
             step, node = parent_step, parent
-
-    def _pop_from_node(self, node, trace):
-        """Removes a value from given node.
-
-        Args:
-            node: Node to get value of.
-            trace: Trace to that node as returned by :func:`Trie._get_node`.
-
-        Returns:
-            Value of the node.
-
-        Raises:
-            ShortKeyError: If the node has no value associated with it and
-                ``default`` has not been given.
-        """
-        value = node.value
-        if value is _EMPTY:
-            raise ShortKeyError()
-        node.value = _EMPTY
-        self._cleanup_trace(trace)
         return value
 
     def pop(self, key, default=_EMPTY):
@@ -960,11 +1024,17 @@ class Trie(_abc.MutableMapping):
                 associated with it nor is a prefix of an existing key.
         """
         try:
-            return self._pop_from_node(*self._get_node(key))
+            _, trace = self._get_node(key)
         except KeyError:
             if default is not _EMPTY:
                 return default
             raise
+        value = self._pop_value(trace)
+        if value is not _EMPTY:
+            return value
+        if default is not _EMPTY:
+            return default
+        raise ShortKeyError()
 
     def popitem(self):
         """Deletes an arbitrary value from the trie and returns it.
@@ -983,12 +1053,10 @@ class Trie(_abc.MutableMapping):
         node = self._root
         trace = [(None, node)]
         while node.value is _EMPTY:
-            # pylint thinks node.children is always _NoChildren which is missing
-            # pick_child but we know it must be _OneChild or _Children object:
-            step, node = node.children.pick_child()  # pylint: disable=no-member
+            step, node = next(node.children.iteritems())
             trace.append((step, node))
-        return (self._key_from_path((step for step, _ in trace[1:])),
-                self._pop_from_node(node, trace))
+        key = self._key_from_path((step for step, _ in trace[1:]))
+        return key, self._pop_value(trace)
 
     def __delitem__(self, key_or_slice):
         """Deletes value associated with given key or raises KeyError.
@@ -1030,8 +1098,7 @@ class Trie(_abc.MutableMapping):
             node.children = _EMPTY
         elif node.value is _EMPTY:
             raise ShortKeyError(key)
-        node.value = _EMPTY
-        self._cleanup_trace(trace)
+        self._pop_value(trace)
 
     class _NoneStep(object):
         """Representation of a non-existent step towards non-existent node."""
@@ -1067,10 +1134,9 @@ class Trie(_abc.MutableMapping):
             """
             if index == 0:
                 return self.key
-            elif index == 1:
+            if index == 1:
                 return self.value
-            else:
-                raise IndexError('index out of range')
+            raise IndexError('index out of range')
 
         def __repr__(self):
             return '(None Step)'
@@ -1122,7 +1188,7 @@ class Trie(_abc.MutableMapping):
         def key(self):
             """Returns key of the node."""
             if not hasattr(self, '_Step__key'):
-                # pylint: disable=protected-access
+                # pylint:disable=protected-access,attribute-defined-outside-init
                 self.__key = self._trie._key_from_path(self._path[:self._pos])
             return self.__key
 
@@ -1292,9 +1358,111 @@ class Trie(_abc.MutableMapping):
             pass
         return ret
 
+    def strictly_equals(self, other):
+        """Checks whether tries are equal with the same structure.
+
+        This is stricter comparison than the one performed by equality operator.
+        It not only requires for keys and values to be equal but also for the
+        two tries to be of the same type and have the same structure.
+
+        For example, for two :class:`pygtrie.StringTrie` objects to be equal,
+        they need to have the same structure as well as the same separator as
+        seen below:
+
+            >>> import pygtrie
+            >>> t0 = StringTrie({'foo/bar': 42}, separator='/')
+            >>> t1 = StringTrie({'foo.bar': 42}, separator='.')
+            >>> t0.strictly_equals(t1)
+            False
+
+            >>> t0 = StringTrie({'foo/bar.baz': 42}, separator='/')
+            >>> t1 = StringTrie({'foo/bar.baz': 42}, separator='.')
+            >>> t0 == t1
+            True
+            >>> t0.strictly_equals(t1)
+            False
+
+        Args:
+            other: Other trie to compare to.
+
+        Returns:
+            Whether the two tries are the same type and have the same structure.
+        """
+        if self is other:
+            return True
+        if type(self) != type(other):
+            return False
+        result = self._eq_impl(other)
+        if result is NotImplemented:
+            return False
+        else:
+            return result
+
     def __eq__(self, other):
-        # pylint: disable=protected-access
-        return self is other or self._root.equals(other._root)
+        """Compares this trie’s mapping with another mapping.
+
+        Note that this method doesn’t take trie’s structure into consideration.
+        What matters is whether keys and values in both mappings are the same.
+        This may lead to unexpected results, for example:
+
+            >>> import pygtrie
+            >>> t0 = StringTrie({'foo/bar': 42}, separator='/')
+            >>> t1 = StringTrie({'foo.bar': 42}, separator='.')
+            >>> t0 == t1
+            False
+
+            >>> t0 = StringTrie({'foo/bar.baz': 42}, separator='/')
+            >>> t1 = StringTrie({'foo/bar.baz': 42}, separator='.')
+            >>> t0 == t1
+            True
+
+            >>> t0 = Trie({'foo': 42})
+            >>> t1 = CharTrie({'foo': 42})
+            >>> t0 == t1
+            False
+
+        This behaviour is required to maintain consistency with Mapping
+        interface and its __eq__ method.  For example, this implementation
+        maintains transitivity of the comparison:
+
+            >>> t0 = StringTrie({'foo/bar.baz': 42}, separator='/')
+            >>> d = {'foo/bar.baz': 42}
+            >>> t1 = StringTrie({'foo/bar.baz': 42}, separator='.')
+            >>> t0 == d
+            True
+            >>> d == t1
+            True
+            >>> t0 == t1
+            True
+
+            >>> t0 = Trie({'foo': 42})
+            >>> d = {'foo': 42}
+            >>> t1 = CharTrie({'foo': 42})
+            >>> t0 == d
+            False
+            >>> d == t1
+            True
+            >>> t0 == t1
+            False
+
+        Args:
+            other: Other object to compare to.
+
+        Returns:
+            ``NotImplemented`` if this method does not know how to perform the
+            comparison or a ``bool`` denoting whether the two objects are equal
+            or not.
+        """
+        if self is other:
+            return True
+        if type(other) == type(self):
+            result = self._eq_impl(other)
+            if result is not NotImplemented:
+                return result
+        return super(Trie, self).__eq__(other)
+
+    def _eq_impl(self, other):
+        return self._root.equals(other._root) # pylint: disable=protected-access
 
     def __ne__(self, other):
         return not self == other
@@ -1360,18 +1528,25 @@ class Trie(_abc.MutableMapping):
         iterable of children nodes constructed by node_factory, optional value
         is the value associated with the path.
 
-        node_factory's children argument is a generator which has a few
+        node_factory's children argument is an iterator which has a few
         consequences:
 
-        * To traverse into node's children, the generator must be iterated over.
+        * To traverse into node's children, the object must be iterated over.
           This can by accomplished by a simple ``children = list(children)``
           statement.
         * Ignoring the argument allows node_factory to stop the traversal from
           going into the children of the node.  In other words, whole subtries
           can be removed from traversal if node_factory chooses so.
-        * If children is stored as is (i.e. as a generator) when it is iterated
-          over later on it will see state of the trie as it is during the
-          iteration and not when traverse method was called.
+        * If children is stored as is (i.e. as a iterator) when it is iterated
+          over later on it may see an inconsistent state of the trie if it has
+          changed between invocation of this method and the iteration.
+
+        However, to allow constant-time determination whether the node has
+        children or not, the iterator implements bool conversion such that
+        ``has_children = bool(children)`` will tell whether node has children
+        without iterating over them.  (Note that ``bool(children)`` will
+        continue returning ``True`` even if the iterator has been iterated
+        over).
 
         :func:`Trie.traverse` has two advantages over :func:`Trie.iteritems` and
         similar methods:
@@ -1488,12 +1663,13 @@ class Trie(_abc.MutableMapping):
         Returns:
             Node object constructed by node_factory corresponding to the root
             node.
-
         """
         node, _ = self._get_node(prefix)
         return node.traverse(node_factory, self._key_from_path,
                              list(self.__path_from_key(prefix)),
                              self._iteritems)
+
+    traverse.uses_bool_convertible_children = True
 
 class CharTrie(Trie):
     """A variant of a :class:`pygtrie.Trie` which accepts strings as keys.
@@ -1503,7 +1679,7 @@ class CharTrie(Trie):
     back to the client (for instance when :func:`Trie.keys` method is called),
     those keys are returned as strings.
 
-    Canonical example where this class can be used is a dictionary of words in
+    Common example where this class can be used is a dictionary of words in
     a natural language.  For example::
 
         >>> import pygtrie
@@ -1530,10 +1706,10 @@ class StringTrie(Trie):
     """:class:`pygtrie.Trie` variant accepting strings with a separator as keys.
 
     The trie accepts strings as keys which are split into components using
-    a separator specified during initialisation (forward slash,i.e. ``/``, by
+    a separator specified during initialisation (forward slash, i.e. ``/``, by
     default).
 
-    Canonical example where this class can be used is when keys are paths.  For
+    Common example where this class can be used is when keys are paths.  For
     example, it could map from a path to a request handler::
 
         import pygtrie
@@ -1585,6 +1761,13 @@ class StringTrie(Trie):
             trie[key] = value
         return trie
 
+    @classmethod
+    def _merge_impl(cls, dst, src, overwrite):
+        if not isinstance(dst, StringTrie):
+            raise TypeError('%s cannot be merged into a %s' % (
+                type(src).__name__, type(dst).__name__))
+        super(StringTrie, cls)._merge_impl(dst, src, overwrite=overwrite)
+
     def __str__(self):
         if not self:
             return '%s(separator=%s)' % (type(self).__name__, self._separator)
@@ -1594,6 +1777,15 @@ class StringTrie(Trie):
     def __repr__(self):
         return '%s([%s], separator=%r)' % (
             type(self).__name__, self._str_items('(%r, %r)'), self._separator)
+
+    def _eq_impl(self, other):
+        # If separators differ, fall back to slow generic comparison.  This is
+        # because we want StringTrie(foo/bar.baz: 42, separator=/) compare equal
+        # to StringTrie(foo/bar.baz: 42, separator=.) even though they have
+        # different trie structure.
+        if self._separator != other._separator:  # pylint: disable=protected-access
+            return NotImplemented
+        return super(StringTrie, self)._eq_impl(other)
 
     def _path_from_key(self, key):
         return key.split(self._separator)
@@ -1685,15 +1877,14 @@ class PrefixSet(_abc.MutableSet):
         """
         if prefix is _EMPTY:
             return iter(self)
-        elif self._trie.has_node(prefix):
+        if self._trie.has_node(prefix):
             return self._trie.iterkeys(prefix=prefix)
-        elif prefix in self:
+        if prefix in self:
             # Make sure the type of returned keys is consistent.
             # pylint: disable=protected-access
             return (
                 self._trie._key_from_path(self._trie._path_from_key(prefix)),)
-        else:
-            return ()
+        return ()
 
     def __len__(self):
         """Returns number of keys stored in the set.

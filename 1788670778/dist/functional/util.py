@@ -1,5 +1,3 @@
-from __future__ import absolute_import, division
-
 import collections
 import math
 from functools import reduce
@@ -7,13 +5,9 @@ from itertools import chain, count, islice, takewhile
 from multiprocessing import Pool, cpu_count
 
 import dill as serializer
-import six
 
 
-if six.PY2:
-    PROTOCOL = 2
-else:
-    PROTOCOL = serializer.HIGHEST_PROTOCOL
+PROTOCOL = serializer.HIGHEST_PROTOCOL
 CPU_COUNT = cpu_count()
 
 
@@ -41,9 +35,7 @@ def is_primitive(val):
     :param val: value to check
     :return: True if value is a primitive, else False
     """
-    return isinstance(val,
-                      (str, bool, float, complex, bytes, six.text_type)
-                      + six.string_types + six.integer_types)
+    return isinstance(val, (str, bool, float, complex, bytes, int))
 
 
 def is_namedtuple(val):
@@ -57,7 +49,7 @@ def is_namedtuple(val):
     bases = val_type.__bases__
     if len(bases) != 1 or bases[0] != tuple:
         return False
-    fields = getattr(val_type, '_fields', None)
+    fields = getattr(val_type, "_fields", None)
     return all(isinstance(n, str) for n in fields)
 
 
@@ -91,7 +83,7 @@ def is_iterable(val):
     """
     if isinstance(val, list):
         return False
-    return isinstance(val, collections.Iterable)
+    return isinstance(val, collections.abc.Iterable)
 
 
 def is_tabulatable(val):
@@ -125,7 +117,7 @@ def unpack(packed):
     """
     func, args = serializer.loads(packed)
     result = func(*args)
-    if isinstance(result, collections.Iterable):
+    if isinstance(result, collections.abc.Iterable):
         return list(result)
     return None
 
@@ -150,7 +142,8 @@ def parallelize(func, result, processes=None, partition_size=None):
     :return: Iterable of applying func on result
     """
     parallel_iter = lazy_parallelize(
-        func, result, processes=processes, partition_size=partition_size)
+        func, result, processes=processes, partition_size=partition_size
+    )
     return chain.from_iterable(parallel_iter)
 
 
@@ -170,7 +163,7 @@ def lazy_parallelize(func, result, processes=None, partition_size=None):
     partition_size = partition_size or compute_partition_size(result, processes)
     pool = Pool(processes=processes)
     partitions = split_every(partition_size, iter(result))
-    packed_partitions = (pack(func, (partition, )) for partition in partitions)
+    packed_partitions = (pack(func, (partition,)) for partition in partitions)
     for pool_result in pool.imap(unpack, packed_partitions):
         yield pool_result
     pool.terminate()

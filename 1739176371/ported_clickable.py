@@ -96,14 +96,34 @@ add_to_card = """
   }
   
 </style>
-<script type="text/javascript">
-function ct_click(tag) {
-    pycmd("ct_click_" + tag)
-}
-function ct_dblclick(tag, deck) {
-    pycmd("ct_dblclick_" + tag + "|" + deck)
-}
-</script>
+
+<div>
+  <script type="text/javascript">
+    function ct_click(tag) {
+      pycmd("ct_click_" + tag)
+    }
+    function ct_dblclick(tag, deck) {
+      pycmd("ct_dblclick_" + tag + "|" + deck)
+    }
+
+    (function(){
+      // numTagLevelsToShow is defined in AnKing note types
+      if(typeof numTagLevelsToShow === 'undefined') return;
+
+      var clickableTags = document.getElementsByClassName("clickable-tag");
+      for (let tagElm of clickableTags){
+        var tag = tagElm.innerHTML;
+        // numTagLevelsToShow == 0 means the whole tag should be shown
+        if(numTagLevelsToShow != 0){
+          tag = tag.split('::').slice(-numTagLevelsToShow).join("::");
+        }
+        tagElm.innerHTML = tag;
+      };
+
+    })();
+    
+  </script>
+</div>
 """
 
 
@@ -122,15 +142,11 @@ def on_field_filter(text, field, filter, context: TemplateRenderContext):
     if filter != "clickable" or field != "Tags":
         return text
 
-    kbd = """
-<kbd onclick="ct_click('{tag}')" ondblclick="ct_dblclick('{tag}', '{deck}')">
-  {tag}
-</kbd>
-"""
-
     return "".join(
         [
-            kbd.format(tag=tag, deck=context.fields()["Deck"])
+            f"""<kbd class="clickable-tag" onclick="ct_click('{tag}')" ondblclick="ct_dblclick('{tag}', '{context.fields()["Deck"]}')">
+          {tag}
+          </kbd>"""
             for tag in context.fields()["Tags"].split()
         ]
     )

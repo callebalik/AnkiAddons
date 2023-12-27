@@ -1,7 +1,12 @@
-{"Again": "red",
-"Hard" : "orange",	
-"Good (2 Answers)": "green",
-"Good (3 Answers)": "green",
-"Good (4 Answers)": "green",
-"Easy (3 Answers)": "blue",
-"Easy (4 Answers)": "blue"}
+{
+  "colours": {
+    "2 answers": ["red", "green"],
+    "3 answers": ["red", "green", "blue"],
+    "4 answers": ["red", "darkorange", "green", "blue"]
+  },
+  "colours-dark": {
+    "2 answers": ["#EB212E", "#30B700"],
+    "3 answers": ["#EB212E", "#30B700", "#00AEEF"],
+    "4 answers": ["#EB212E", "#FFC600", "#30B700", "#00AEEF"]
+  }
+}

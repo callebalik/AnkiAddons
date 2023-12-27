@@ -48,7 +48,6 @@ class NoteModel(JsonSerializableAnkiDict):
             collection.models.add(self.anki_dict)
         else:
             collection.models.update(self.anki_dict)
-        collection.models.flush()
 
         if not new_model:
             self.update_cards(collection, note_model_dict)
@@ -72,4 +71,4 @@ class NoteModel(JsonSerializableAnkiDict):
 
         # todo signals instead of direct dialog creation?
 
-        ChangeModelDialog(collection, collection.models.nids(old_model), old_model).exec_()
+        ChangeModelDialog(collection, collection.models.nids(old_model), old_model).exec()

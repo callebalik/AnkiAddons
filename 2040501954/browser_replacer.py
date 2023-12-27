@@ -3,7 +3,6 @@ This file contains BrowserReplacer, which replicates the function of
 replacer.js for the Browser search bar.
 """
 
-import aqt
 
 from aqt.qt import *
 
@@ -12,7 +11,7 @@ class BrowserReplacer(object):
     def __init__(self, match_list):
         self._match_list = match_list
 
-    def on_browser_init(self, browser, mw):
+    def on_browser_init(self, browser, mw, card = None, search = None):
         """ Set up hooks to the search box. """
         self._browser = browser
 
@@ -28,7 +27,6 @@ class BrowserReplacer(object):
         """ Underlying QLineEdit object can get deleted. """
         searchEdit = self._browser.form.searchEdit
         if not searchEdit:
-            # aqt.utils.showInfo(str(self._browser) + '\n' + str(self._browser.form))
             return None
         else:
             return searchEdit.lineEdit()

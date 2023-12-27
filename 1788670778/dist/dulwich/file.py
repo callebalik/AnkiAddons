@@ -20,20 +20,17 @@
 
 """Safe access to git files."""
 
-import errno
-import io
 import os
 import sys
-import tempfile
+import warnings
 
 
 def ensure_dir_exists(dirname):
     """Ensure a directory exists, creating if necessary."""
     try:
         os.makedirs(dirname)
-    except OSError as e:
-        if e.errno != errno.EEXIST:
-            raise
+    except FileExistsError:
+        pass
 
 
 def _fancy_rename(oldname, newname):
@@ -44,6 +41,9 @@ def _fancy_rename(oldname, newname):
         except OSError:
             raise
         return
+
+    # Defer the tempfile import since it pulls in a lot of other things.
+    import tempfile
 
     # destination file exists
     try:
@@ -57,7 +57,7 @@ def _fancy_rename(oldname, newname):
     try:
         os.rename(newname, tmpfile)
     except OSError:
-        raise   # no rename occurred
+        raise  # no rename occurred
     try:
         os.rename(oldname, newname)
     except OSError:
@@ -66,7 +66,7 @@ def _fancy_rename(oldname, newname):
     os.remove(tmpfile)
 
 
-def GitFile(filename, mode='rb', bufsize=-1):
+def GitFile(filename, mode="rb", bufsize=-1, mask=0o644):
     """Create a file object that obeys the git file locking protocol.
 
     Returns: a builtin file object or a _GitFile object
@@ -77,17 +77,21 @@ def GitFile(filename, mode='rb', bufsize=-1):
     are not.  To read and write from the same file, you can take advantage of
     the fact that opening a file for write does not actually open the file you
     request.
+
+    The default file mask makes any created files user-writable and
+    world-readable.
+
     """
-    if 'a' in mode:
-        raise IOError('append mode not supported for Git files')
-    if '+' in mode:
-        raise IOError('read/write mode not supported for Git files')
-    if 'b' not in mode:
-        raise IOError('text mode not supported for Git files')
-    if 'w' in mode:
-        return _GitFile(filename, mode, bufsize)
+    if "a" in mode:
+        raise OSError("append mode not supported for Git files")
+    if "+" in mode:
+        raise OSError("read/write mode not supported for Git files")
+    if "b" not in mode:
+        raise OSError("text mode not supported for Git files")
+    if "w" in mode:
+        return _GitFile(filename, mode, bufsize, mask)
     else:
-        return io.open(filename, mode, bufsize)
+        return open(filename, mode, bufsize)
 
 
 class FileLocked(Exception):
@@ -96,10 +100,10 @@ class FileLocked(Exception):
     def __init__(self, filename, lockfilename):
         self.filename = filename
         self.lockfilename = lockfilename
-        super(FileLocked, self).__init__(filename, lockfilename)
+        super().__init__(filename, lockfilename)
 
 
-class _GitFile(object):
+class _GitFile:
     """File that follows the git locking protocol for writes.
 
     All writes to a file foo will be written into foo.lock in the same
@@ -110,27 +114,44 @@ class _GitFile(object):
         released. Typically this will happen in a finally block.
     """
 
-    PROXY_PROPERTIES = set(['closed', 'encoding', 'errors', 'mode', 'name',
-                            'newlines', 'softspace'])
-    PROXY_METHODS = ('__iter__', 'flush', 'fileno', 'isatty', 'read',
-                     'readline', 'readlines', 'seek', 'tell',
-                     'truncate', 'write', 'writelines')
+    PROXY_PROPERTIES = {
+        "closed",
+        "encoding",
+        "errors",
+        "mode",
+        "name",
+        "newlines",
+        "softspace",
+    }
+    PROXY_METHODS = (
+        "__iter__",
+        "flush",
+        "fileno",
+        "isatty",
+        "read",
+        "readline",
+        "readlines",
+        "seek",
+        "tell",
+        "truncate",
+        "write",
+        "writelines",
+    )
 
-    def __init__(self, filename, mode, bufsize):
+    def __init__(self, filename, mode, bufsize, mask):
         self._filename = filename
         if isinstance(self._filename, bytes):
-            self._lockfilename = self._filename + b'.lock'
+            self._lockfilename = self._filename + b".lock"
         else:
-            self._lockfilename = self._filename + '.lock'
+            self._lockfilename = self._filename + ".lock"
         try:
             fd = os.open(
                 self._lockfilename,
-                os.O_RDWR | os.O_CREAT | os.O_EXCL |
-                getattr(os, "O_BINARY", 0))
-        except OSError as e:
-            if e.errno == errno.EEXIST:
-                raise FileLocked(filename, self._lockfilename)
-            raise
+                os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0),
+                mask,
+            )
+        except FileExistsError as exc:
+            raise FileLocked(filename, self._lockfilename) from exc
         self._file = os.fdopen(fd, mode, bufsize)
         self._closed = False
 
@@ -148,10 +169,8 @@ class _GitFile(object):
         try:
             os.remove(self._lockfilename)
             self._closed = True
-        except OSError as e:
+        except FileNotFoundError:
             # The file may have been removed already, which is ok.
-            if e.errno != errno.ENOENT:
-                raise
             self._closed = True
 
     def close(self):
@@ -168,13 +187,14 @@ class _GitFile(object):
         """
         if self._closed:
             return
+        self._file.flush()
         os.fsync(self._file.fileno())
         self._file.close()
         try:
-            if getattr(os, 'replace', None) is not None:
+            if getattr(os, "replace", None) is not None:
                 os.replace(self._lockfilename, self._filename)
             else:
-                if sys.platform != 'win32':
+                if sys.platform != "win32":
                     os.rename(self._lockfilename, self._filename)
                 else:
                     # Windows versions prior to Vista don't support atomic
@@ -183,11 +203,19 @@ class _GitFile(object):
         finally:
             self.abort()
 
+    def __del__(self):
+        if not getattr(self, '_closed', True):
+            warnings.warn('unclosed %r' % self, ResourceWarning, stacklevel=2)
+            self.abort()
+
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+        if exc_type is not None:
+            self.abort()
+        else:
+            self.close()
 
     def __getattr__(self, name):
         """Proxy property calls to the underlying file."""

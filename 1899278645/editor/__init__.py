@@ -1,22 +1,19 @@
 from aqt.gui_hooks import (
-    profile_did_open,
+    editor_will_show_context_menu,
     editor_did_init_buttons,
     editor_did_init_shortcuts,
-    editor_will_show_context_menu,
 )
 
-from ..config_var import getconfig
-
-from .shortcuts_buttons import setupButtons, SetupShortcuts
-from .contextmenu import add_to_context
-
-
-def contextmenu():
-    if getconfig().get("v2_show_in_contextmenu", False):
-        editor_will_show_context_menu.append(add_to_context)
+from .contextmenu import setup_contextmenu
+from .buttons import setup_extra_buttons, setup_more_button
+from .shortcuts import setup_shortcuts, setup_styling_undo_shortcut
 
 
 def init_editor():
-    profile_did_open.append(contextmenu)
-    editor_did_init_buttons.append(setupButtons)
-    editor_did_init_shortcuts.append(SetupShortcuts)
+    editor_will_show_context_menu.append(setup_contextmenu)
+
+    editor_did_init_buttons.append(setup_extra_buttons)
+    editor_did_init_buttons.append(setup_more_button)
+
+    editor_did_init_shortcuts.append(setup_shortcuts)
+    editor_did_init_shortcuts.append(setup_styling_undo_shortcut)

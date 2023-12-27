@@ -1,51 +1,30 @@
-# Copyright:  (c) 2019- ignd
-# License: GNU AGPL, version 3 or later; http://www.gnu.org/licenses/agpl.html
-
-import os
-from pprint import pprint as pp
-
-from PyQt5.QtWidgets import (
-    QLabel,
-    QWidgetAction,
-)
-
-from aqt import mw
-from aqt.editor import Editor, EditorWebView
+from aqt.gui_hooks import editor_will_show_context_menu
+from aqt.qt import QLabel, QWidgetAction
+from aqt.editor import Editor
 
 from ..config_var import getconfig
+from ..colors import hex_to_rgb_string
 
-from .editor_rangy_helpers import classes_addon_rangy_remove_all
-from .editor_apply_categories import apply_categories
+from .rangy_helpers import classes_addon_rangy_remove_all
+from .apply_categories import apply_categories
 
 
-def co_my_highlight_helper(view, category, setting):
+def my_highlight_helper(view, category, setting):
     func = apply_categories[category]
     func(view.editor, setting)
 
-
-def co_hex_to_rgb(color):
-    # https://stackoverflow.com/a/29643643
-    c = color.lstrip('#')
-    red = int(c[0:2], 16)
-    green = int(c[2:4], 16)
-    blue = int(c[4:6], 16)
-    alpha = 128
-    values = "{}, {}, {}, {}".format(red, green, blue, alpha)
-    return values
-
-
-def co_return_stylesheet(e):
+def return_stylesheet(e):
     if e['Category'] == 'Backcolor (inline)':
-        thiscolor = co_hex_to_rgb(e['Setting'])
+        thiscolor = hex_to_rgb_string(e['Setting'])
         line1 = "background-color: rgba({}); ".format(thiscolor)
     elif e['Category'] == 'Backcolor (via class)':
-        thiscolor = co_hex_to_rgb(e['Text_in_menu_styling'])
+        thiscolor = hex_to_rgb_string(e['Text_in_menu_styling'])
         line1 = "background-color: rgba({}); ".format(thiscolor)
     elif e['Category'] == 'Forecolor':
-        thiscolor = co_hex_to_rgb(e['Setting'])
+        thiscolor = hex_to_rgb_string(e['Setting'])
         line1 = "color: rgba({}); ".format(thiscolor)
     elif e['Category'] == 'Forecolor (via class)':
-        thiscolor = co_hex_to_rgb(e['Text_in_menu_styling'])
+        thiscolor = hex_to_rgb_string(e['Text_in_menu_styling'])
         line1 = "color: rgba({}); ".format(thiscolor)
     elif e['Category'] == 'text wrapper':
         line1 = ""
@@ -74,8 +53,7 @@ def co_return_stylesheet(e):
         """.format(e['Text_in_menu_styling'])
     return stylesheet
 
-
-def co_my_label_text(_dict, fmt):
+def my_label_text(_dict, fmt):
     config = getconfig()
     totallength = config['maxname'] + config['maxshortcut'] + 3
     remaining = totallength - len(_dict.get("Hotkey", 0))
@@ -104,31 +82,35 @@ def co_my_label_text(_dict, fmt):
         out = t1.ljust(remaining) + _dict.get("Hotkey", "")
     return out
 
-
-def co_create_menu_entry(view, e, parentmenu):
-    t = co_my_label_text(e, True)
+def create_menu_entry(view, e, parentmenu):
+    t = my_label_text(e, True)
     y = QLabel(t)
     # https://stackoverflow.com/a/6876509
     y.setAutoFillBackground(True)
-    stylesheet = co_return_stylesheet(e)
+    stylesheet = return_stylesheet(e)
     y.setStyleSheet(stylesheet)
     x = QWidgetAction(parentmenu)
     x.setDefaultWidget(y)
     cat = e["Category"]
     se = e.get("Setting", e.get("Category", False))
-    x.triggered.connect(lambda _, a=cat, b=se: co_my_highlight_helper(view, a, b))  # ???
+    x.triggered.connect(lambda _, a=cat, b=se: my_highlight_helper(view, a, b))  # ???
     return x
 
-
-def add_to_context_styled(view, menu):
+def setup_contextmenu(view, menu):
     config = getconfig()
+
+    if config.get("v2_show_in_contextmenu", False):
+        return
+
     menu.addSeparator()
     a = menu.addAction("Clear more formatting (Classes, etc.)")
     a.triggered.connect(lambda _: classes_addon_rangy_remove_all(view.editor))
     menu.addSeparator()
     groups = {}
+
     for i in config['context_menu_groups']:
         groups[i] = menu.addMenu(i)
+
     for row in config['v3']:
         if row.get('Show_in_menu', True):
             if row['Category'] in ["class (other)", "text wrapper"]:
@@ -138,8 +120,5 @@ def add_to_context_styled(view, menu):
                     submenu = groups[row['Category']]
             else:
                 submenu = groups[row['Category']]
-            submenu.addAction(co_create_menu_entry(view, row, submenu))
 
-
-def add_to_context(view, menu):
-    add_to_context_styled(view, menu)
+            submenu.addAction(create_menu_entry(view, row, submenu))

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # test_line_ending.py -- Tests for the line ending functions
 # encoding: utf-8
 # Copyright (C) 2018-2019 Boris Feld <boris.feld@comet.ml>
@@ -22,15 +21,12 @@
 
 """Tests for the line ending conversion."""
 
-from dulwich.line_ending import (
-    normalize_blob,
-    convert_crlf_to_lf,
-    convert_lf_to_crlf,
-    get_checkin_filter_autocrlf,
-    get_checkout_filter_autocrlf,
-)
-from dulwich.objects import Blob
 from dulwich.tests import TestCase
+
+from ..line_ending import (convert_crlf_to_lf, convert_lf_to_crlf,
+                           get_checkin_filter_autocrlf,
+                           get_checkout_filter_autocrlf, normalize_blob)
+from ..objects import Blob
 
 
 class LineEndingConversion(TestCase):
@@ -40,31 +36,22 @@ class LineEndingConversion(TestCase):
         self.assertEqual(convert_crlf_to_lf(b"foobar"), b"foobar")
 
     def test_convert_crlf_to_lf(self):
-        self.assertEqual(
-            convert_crlf_to_lf(b"line1\r\nline2"), b"line1\nline2"
-        )
+        self.assertEqual(convert_crlf_to_lf(b"line1\r\nline2"), b"line1\nline2")
 
     def test_convert_crlf_to_lf_mixed(self):
-        self.assertEqual(
-            convert_crlf_to_lf(b"line1\r\n\nline2"), b"line1\n\nline2"
-        )
+        self.assertEqual(convert_crlf_to_lf(b"line1\r\n\nline2"), b"line1\n\nline2")
 
     def test_convert_lf_to_crlf_no_op(self):
         self.assertEqual(convert_lf_to_crlf(b"foobar"), b"foobar")
 
     def test_convert_lf_to_crlf(self):
-        self.assertEqual(
-            convert_lf_to_crlf(b"line1\nline2"), b"line1\r\nline2"
-        )
+        self.assertEqual(convert_lf_to_crlf(b"line1\nline2"), b"line1\r\nline2")
 
     def test_convert_lf_to_crlf_mixed(self):
-        self.assertEqual(
-            convert_lf_to_crlf(b"line1\r\n\nline2"), b"line1\r\n\r\nline2"
-        )
+        self.assertEqual(convert_lf_to_crlf(b"line1\r\n\nline2"), b"line1\r\n\r\nline2")
 
 
 class GetLineEndingAutocrlfFilters(TestCase):
-
     def test_get_checkin_filter_autocrlf_default(self):
         checkin_filter = get_checkin_filter_autocrlf(b"false")
 

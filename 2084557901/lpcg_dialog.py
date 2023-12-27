@@ -1,16 +1,21 @@
+"""
+Dialog box for importing texts.
+"""
+
 import codecs
 
 # pylint: disable=no-name-in-module
-from PyQt5.QtWidgets import QDialog
-from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtCore import QUrl
-
-import aqt
-from aqt.qt import QAction  # type: ignore
+from aqt.deckchooser import DeckChooser
+from aqt.qt import QDesktopServices, QDialog, QUrl, qtmajor
 from aqt.utils import getFile, showWarning, askUser, tooltip
 from anki.notes import Note
 
-from . import import_dialog as lpcg_form
+if qtmajor > 5:
+    from . import import_dialog6 as lpcg_form
+else:
+    from . import import_dialog5 as lpcg_form  # type: ignore
+
+# pylint: disable=wrong-import-position
 from .gen_notes import add_notes, cleanse_text
 from . import models
 
@@ -30,13 +35,17 @@ class LPCGDialog(QDialog):
         QDialog.__init__(self)
         self.form = lpcg_form.Ui_Dialog()
         self.form.setupUi(self)
-        self.deckChooser = aqt.deckchooser.DeckChooser(
-            self.mw, self.form.deckChooser)
+        self.deckChooser = DeckChooser(self.mw, self.form.deckChooser)
 
         self.form.addCardsButton.clicked.connect(self.accept)
         self.form.cancelButton.clicked.connect(self.reject)
         self.form.openFileButton.clicked.connect(self.onOpenFile)
         self.form.helpButton.clicked.connect(self.onHelp)
+
+        self.addonConfig = self.mw.addonManager.getConfig(__name__)
+        self.form.contextLinesSpin.setValue(self.addonConfig['defaultLinesOfContext'])
+        self.form.reciteLinesSpin.setValue(self.addonConfig['defaultLinesToRecite'])
+        self.form.groupLinesSpin.setValue(self.addonConfig['defaultLinesInGroupsOf'])
 
     def accept(self):
         "On close, create notes from the contents of the poem editor."
@@ -45,7 +54,9 @@ class LPCGDialog(QDialog):
         if not title:
             showWarning("You must enter a title for this poem.")
             return
-        if self.mw.col.findNotes(f'"note:{models.LpcgOne.name}" "Title:{title}"'):  # pylint: disable=no-member
+        escaped_title = title.replace('"', '\\"')
+        if self.mw.col.find_notes(f'"note:{models.LpcgOne.name}" '  # pylint: disable=no-member
+                                  f'"Title:{escaped_title}"'):
             showWarning("You already have a poem by that title in your "
                         "database. Please check to see if you've already "
                         "added it, or use a different name.")
@@ -56,16 +67,16 @@ class LPCGDialog(QDialog):
                         '"Open File" button to import a text file.')
             return
 
+        author = self.form.authorBox.text().strip()
         tags = self.mw.col.tags.split(self.form.tagsBox.text())
-        text = cleanse_text(self.form.textBox.toPlainText().strip(),
-                            self.mw.addonManager.getConfig(__name__))
+        text = cleanse_text(self.form.textBox.toPlainText().strip(), self.addonConfig)
         context_lines = self.form.contextLinesSpin.value()
         recite_lines = self.form.reciteLinesSpin.value()
         group_lines = self.form.groupLinesSpin.value()
         did = self.deckChooser.selectedId()
 
         try:
-            notes_generated = add_notes(self.mw.col, Note, title, tags, text, did,
+            notes_generated = add_notes(self.mw.col, Note, title, author, tags, text, did,
                                         context_lines, group_lines, recite_lines)
         except KeyError as e:
             showWarning(
@@ -79,6 +90,7 @@ class LPCGDialog(QDialog):
 
         if notes_generated:
             super(LPCGDialog, self).accept()
+            self.deckChooser.cleanup()
             self.mw.reset()
             tooltip("%i notes added." % notes_generated)
 

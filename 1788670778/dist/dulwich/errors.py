@@ -21,6 +21,11 @@
 
 """Dulwich-related exception classes and utility functions."""
 
+
+# Please do not add more errors here, but instead add them close to the code
+# that raises the error.
+
+
 import binascii
 
 
@@ -37,12 +42,14 @@ class ChecksumMismatch(Exception):
         self.extra = extra
         if self.extra is None:
             Exception.__init__(
-                self, "Checksum mismatch: Expected %s, got %s" %
-                (expected, got))
+                self,
+                "Checksum mismatch: Expected {}, got {}".format(expected, got),
+            )
         else:
             Exception.__init__(
-                self, "Checksum mismatch: Expected %s, got %s; %s" %
-                (expected, got, extra))
+                self,
+                "Checksum mismatch: Expected {}, got {}; {}".format(expected, got, extra),
+            )
 
 
 class WrongObjectException(Exception):
@@ -54,32 +61,34 @@ class WrongObjectException(Exception):
     was expected if they were raised.
     """
 
+    type_name: str
+
     def __init__(self, sha, *args, **kwargs):
-        Exception.__init__(self, "%s is not a %s" % (sha, self.type_name))
+        Exception.__init__(self, "{} is not a {}".format(sha, self.type_name))
 
 
 class NotCommitError(WrongObjectException):
     """Indicates that the sha requested does not point to a commit."""
 
-    type_name = 'commit'
+    type_name = "commit"
 
 
 class NotTreeError(WrongObjectException):
     """Indicates that the sha requested does not point to a tree."""
 
-    type_name = 'tree'
+    type_name = "tree"
 
 
 class NotTagError(WrongObjectException):
     """Indicates that the sha requested does not point to a tag."""
 
-    type_name = 'tag'
+    type_name = "tag"
 
 
 class NotBlobError(WrongObjectException):
     """Indicates that the sha requested does not point to a blob."""
 
-    type_name = 'blob'
+    type_name = "blob"
 
 
 class MissingCommitError(Exception):
@@ -117,25 +126,32 @@ class GitProtocolError(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
 
+    def __eq__(self, other):
+        return isinstance(self, type(other)) and self.args == other.args
+
 
 class SendPackError(GitProtocolError):
     """An error occurred during send_pack."""
 
 
-class UpdateRefsError(GitProtocolError):
-    """The server reported errors updating refs."""
-
-    def __init__(self, *args, **kwargs):
-        self.ref_status = kwargs.pop('ref_status')
-        super(UpdateRefsError, self).__init__(*args, **kwargs)
-
-
 class HangupException(GitProtocolError):
     """Hangup exception."""
 
-    def __init__(self):
-        super(HangupException, self).__init__(
-            "The remote server unexpectedly closed the connection.")
+    def __init__(self, stderr_lines=None):
+        if stderr_lines:
+            super().__init__(
+                "\n".join(
+                    [line.decode("utf-8", "surrogateescape") for line in stderr_lines]
+                )
+            )
+        else:
+            super().__init__(
+                "The remote server unexpectedly closed the connection."
+            )
+        self.stderr_lines = stderr_lines
+
+    def __eq__(self, other):
+        return isinstance(self, type(other)) and self.stderr_lines == other.stderr_lines
 
 
 class UnexpectedCommandError(GitProtocolError):
@@ -143,11 +159,12 @@ class UnexpectedCommandError(GitProtocolError):
 
     def __init__(self, command):
         if command is None:
-            command = 'flush-pkt'
+            command = "flush-pkt"
         else:
-            command = 'command %s' % command
-        super(UnexpectedCommandError, self).__init__(
-            'Protocol got unexpected %s' % command)
+            command = "command %s" % command
+        super().__init__(
+            "Protocol got unexpected %s" % command
+        )
 
 
 class FileFormatException(Exception):
@@ -160,10 +177,6 @@ class PackedRefsException(FileFormatException):
 
 class ObjectFormatException(FileFormatException):
     """Indicates an error parsing an object."""
-
-
-class EmptyFileException(FileFormatException):
-    """An unexpectedly empty file was encountered."""
 
 
 class NoIndexPresent(Exception):

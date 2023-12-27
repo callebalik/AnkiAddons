@@ -1,5 +1,0 @@
-ansimarkup>=1.3.0
-pygments>=2.2.0
-
-[:sys_platform=="win32"]
-colorama

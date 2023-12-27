@@ -1,0 +1,15 @@
+{
+    "name": "Pop-up Dictionary",
+    "package": "popup_dictionary",
+    "ankiweb_id": "153625306",
+    "author": "Glutanimate",
+    "version": "v1.0.0-beta.1",
+    "homepage": "https://github.com/glutanimate/popup-dictionary",
+    "conflicts": [
+        "153625306",
+        "1496166067"
+    ],
+    "mod": 1628116249,
+    "min_point_version": 22,
+    "max_point_version": 45
+}

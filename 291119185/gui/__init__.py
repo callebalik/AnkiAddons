@@ -2,7 +2,7 @@
 
 # Batch Editing Add-on for Anki
 #
-# Copyright (C) 2016-2019  Aristotelis P. <https://glutanimate.com/>
+# Copyright (C) 2016-2023  Aristotelis P. <https://glutanimate.com/>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -34,7 +34,7 @@ Package that bundles UI components used by the add-on
 (e.g. dialogs, Qt forms, other resources)
 """
 
-def initializeQtResources():
+def initialize_qt_resources():
     """
     Load Qt resources into memory
     """

@@ -1,23 +1,27 @@
-from __future__ import absolute_import
-
 from functools import partial
-from itertools import dropwhile, takewhile, islice, count, product, chain, starmap
+from itertools import (
+    dropwhile,
+    takewhile,
+    islice,
+    count,
+    product,
+    chain,
+    starmap,
+    filterfalse,
+)
 import collections
 import types
 
-from future.builtins import map, filter, zip, range
-
-import six
 from functional.execution import ExecutionStrategies
 
 
 #: Defines a Transformation from a name, function, and execution_strategies
 Transformation = collections.namedtuple(
-    'Transformation', ['name', 'function', 'execution_strategies']
+    "Transformation", ["name", "function", "execution_strategies"]
 )
 
 #: Cache transformation
-CACHE_T = Transformation('cache', None, None)
+CACHE_T = Transformation("cache", None, None)
 
 
 def name(function):
@@ -38,9 +42,11 @@ def map_t(func):
     :param func: map function
     :return: transformation
     """
-    return Transformation('map({0})'.format(name(func)),
-                          partial(map, func),
-                          {ExecutionStrategies.PARALLEL})
+    return Transformation(
+        "map({0})".format(name(func)),
+        partial(map, func),
+        {ExecutionStrategies.PARALLEL},
+    )
 
 
 def select_t(func):
@@ -49,9 +55,11 @@ def select_t(func):
     :param func: select function
     :return: transformation
     """
-    return Transformation('select({0})'.format(name(func)),
-                          partial(map, func),
-                          {ExecutionStrategies.PARALLEL})
+    return Transformation(
+        "select({0})".format(name(func)),
+        partial(map, func),
+        {ExecutionStrategies.PARALLEL},
+    )
 
 
 def starmap_t(func):
@@ -60,9 +68,11 @@ def starmap_t(func):
     :param func: starmap function
     :return: transformation
     """
-    return Transformation('starmap({})'.format(name(func)),
-                          partial(starmap, func),
-                          {ExecutionStrategies.PARALLEL})
+    return Transformation(
+        "starmap({})".format(name(func)),
+        partial(starmap, func),
+        {ExecutionStrategies.PARALLEL},
+    )
 
 
 def filter_t(func):
@@ -71,9 +81,11 @@ def filter_t(func):
     :param func: filter function
     :return: transformation
     """
-    return Transformation('filter({0})'.format(name(func)),
-                          partial(filter, func),
-                          {ExecutionStrategies.PARALLEL})
+    return Transformation(
+        "filter({0})".format(name(func)),
+        partial(filter, func),
+        {ExecutionStrategies.PARALLEL},
+    )
 
 
 def where_t(func):
@@ -82,9 +94,11 @@ def where_t(func):
     :param func: where function
     :return: transformation
     """
-    return Transformation('where({0})'.format(name(func)),
-                          partial(filter, func),
-                          {ExecutionStrategies.PARALLEL})
+    return Transformation(
+        "where({0})".format(name(func)),
+        partial(filter, func),
+        {ExecutionStrategies.PARALLEL},
+    )
 
 
 def filter_not_t(func):
@@ -93,9 +107,11 @@ def filter_not_t(func):
     :param func: filter_not function
     :return: transformation
     """
-    return Transformation('filter_not({0})'.format(name(func)),
-                          partial(six.moves.filterfalse, func),
-                          {ExecutionStrategies.PARALLEL})
+    return Transformation(
+        "filter_not({0})".format(name(func)),
+        partial(filterfalse, func),
+        {ExecutionStrategies.PARALLEL},
+    )
 
 
 def reversed_t():
@@ -103,7 +119,7 @@ def reversed_t():
     Transformation for Sequence.reverse
     :return: transformation
     """
-    return Transformation('reversed', reversed, [ExecutionStrategies.PRE_COMPUTE])
+    return Transformation("reversed", reversed, [ExecutionStrategies.PRE_COMPUTE])
 
 
 def slice_t(start, until):
@@ -114,9 +130,9 @@ def slice_t(start, until):
     :return: transformation
     """
     return Transformation(
-        'slice({0}, {1})'.format(start, until),
+        "slice({0}, {1})".format(start, until),
         lambda sequence: islice(sequence, start, until),
-        None
+        None,
     )
 
 
@@ -125,9 +141,16 @@ def distinct_t():
     Transformation for Sequence.distinct
     :return: transformation
     """
+
     def distinct(sequence):
-        return iter(set(sequence))
-    return Transformation('distinct', distinct, None)
+        seen = set()
+        for element in sequence:
+            if element in seen:
+                continue
+            seen.add(element)
+            yield element
+
+    return Transformation("distinct", distinct, None)
 
 
 def distinct_by_t(func):
@@ -136,6 +159,7 @@ def distinct_by_t(func):
     :param func: distinct_by function
     :return: transformation
     """
+
     def distinct_by(sequence):
         distinct_lookup = {}
         for element in sequence:
@@ -143,7 +167,8 @@ def distinct_by_t(func):
             if key not in distinct_lookup:
                 distinct_lookup[key] = element
         return distinct_lookup.values()
-    return Transformation('distinct_by({0})'.format(name(func)), distinct_by, None)
+
+    return Transformation("distinct_by({0})".format(name(func)), distinct_by, None)
 
 
 def sorted_t(key=None, reverse=False):
@@ -154,9 +179,7 @@ def sorted_t(key=None, reverse=False):
     :return: transformation
     """
     return Transformation(
-        'sorted',
-        lambda sequence: sorted(sequence, key=key, reverse=reverse),
-        None
+        "sorted", lambda sequence: sorted(sequence, key=key, reverse=reverse), None
     )
 
 
@@ -167,9 +190,9 @@ def order_by_t(func):
     :return: transformation
     """
     return Transformation(
-        'order_by({0})'.format(name(func)),
+        "order_by({0})".format(name(func)),
         lambda sequence: sorted(sequence, key=func),
-        None
+        None,
     )
 
 
@@ -184,9 +207,7 @@ def drop_right_t(n):
     else:
         end_index = -n
     return Transformation(
-        'drop_right({0})'.format(n),
-        lambda sequence: sequence[:end_index],
-        None
+        "drop_right({0})".format(n), lambda sequence: sequence[:end_index], None
     )
 
 
@@ -197,9 +218,7 @@ def drop_t(n):
     :return: transformation
     """
     return Transformation(
-        'drop({0})'.format(n),
-        lambda sequence: islice(sequence, n, None),
-        None
+        "drop({0})".format(n), lambda sequence: islice(sequence, n, None), None
     )
 
 
@@ -210,9 +229,7 @@ def drop_while_t(func):
     :return: transformation
     """
     return Transformation(
-        'drop_while({0})'.format(name(func)),
-        partial(dropwhile, func),
-        None
+        "drop_while({0})".format(name(func)), partial(dropwhile, func), None
     )
 
 
@@ -223,9 +240,7 @@ def take_t(n):
     :return: transformation
     """
     return Transformation(
-        'take({0})'.format(n),
-        lambda sequence: islice(sequence, 0, n),
-        None
+        "take({0})".format(n), lambda sequence: islice(sequence, 0, n), None
     )
 
 
@@ -236,9 +251,7 @@ def take_while_t(func):
     :return: transformation
     """
     return Transformation(
-        'take_while({0})'.format(name(func)),
-        partial(takewhile, func),
-        None
+        "take_while({0})".format(name(func)), partial(takewhile, func), None
     )
 
 
@@ -261,9 +274,9 @@ def flat_map_t(func):
     :return: transformation
     """
     return Transformation(
-        'flat_map({0})'.format(name(func)),
+        "flat_map({0})".format(name(func)),
         partial(flat_map_impl, func),
-        {ExecutionStrategies.PARALLEL}
+        {ExecutionStrategies.PARALLEL},
     )
 
 
@@ -273,9 +286,7 @@ def flatten_t():
     :return: transformation
     """
     return Transformation(
-        'flatten',
-        partial(flat_map_impl, lambda x: x),
-        {ExecutionStrategies.PARALLEL}
+        "flatten", partial(flat_map_impl, lambda x: x), {ExecutionStrategies.PARALLEL}
     )
 
 
@@ -286,9 +297,7 @@ def zip_t(zip_sequence):
     :return: transformation
     """
     return Transformation(
-        'zip(<sequence>)',
-        lambda sequence: zip(sequence, zip_sequence),
-        None
+        "zip(<sequence>)", lambda sequence: zip(sequence, zip_sequence), None
     )
 
 
@@ -298,9 +307,7 @@ def zip_with_index_t(start):
     :return: transformation
     """
     return Transformation(
-        'zip_with_index',
-        lambda sequence: zip(sequence, count(start=start)),
-        None
+        "zip_with_index", lambda sequence: zip(sequence, count(start=start)), None
     )
 
 
@@ -311,9 +318,7 @@ def enumerate_t(start):
     :return: transformation
     """
     return Transformation(
-        'enumerate',
-        lambda sequence: enumerate(sequence, start=start),
-        None
+        "enumerate", lambda sequence: enumerate(sequence, start=start), None
     )
 
 
@@ -325,9 +330,7 @@ def cartesian_t(iterables, repeat):
     :return: transformation
     """
     return Transformation(
-        'cartesian',
-        lambda sequence: product(sequence, *iterables, repeat=repeat),
-        None
+        "cartesian", lambda sequence: product(sequence, *iterables, repeat=repeat), None
     )
 
 
@@ -337,9 +340,7 @@ def init_t():
     :return: transformation
     """
     return Transformation(
-        'init',
-        lambda sequence: sequence[:-1],
-        {ExecutionStrategies.PRE_COMPUTE}
+        "init", lambda sequence: sequence[:-1], {ExecutionStrategies.PRE_COMPUTE}
     )
 
 
@@ -348,11 +349,7 @@ def tail_t():
     Transformation for Sequence.tail
     :return: transformation
     """
-    return Transformation(
-        'tail',
-        lambda sequence: islice(sequence, 1, None),
-        None
-    )
+    return Transformation("tail", lambda sequence: islice(sequence, 1, None), None)
 
 
 def inits_t(wrap):
@@ -362,9 +359,11 @@ def inits_t(wrap):
     :return: transformation
     """
     return Transformation(
-        'inits',
-        lambda sequence: [wrap(sequence[:i]) for i in reversed(range(len(sequence) + 1))],
-        {ExecutionStrategies.PRE_COMPUTE}
+        "inits",
+        lambda sequence: [
+            wrap(sequence[:i]) for i in reversed(range(len(sequence) + 1))
+        ],
+        {ExecutionStrategies.PRE_COMPUTE},
     )
 
 
@@ -375,9 +374,9 @@ def tails_t(wrap):
     :return: transformation
     """
     return Transformation(
-        'tails',
+        "tails",
         lambda sequence: [wrap(sequence[i:]) for i in range(len(sequence) + 1)],
-        {ExecutionStrategies.PRE_COMPUTE}
+        {ExecutionStrategies.PRE_COMPUTE},
     )
 
 
@@ -387,11 +386,7 @@ def union_t(other):
     :param other: sequence to union with
     :return: transformation
     """
-    return Transformation(
-        'union',
-        lambda sequence: set(sequence).union(other),
-        None
-    )
+    return Transformation("union", lambda sequence: set(sequence).union(other), None)
 
 
 def intersection_t(other):
@@ -401,9 +396,7 @@ def intersection_t(other):
     :return: transformation
     """
     return Transformation(
-        'intersection',
-        lambda sequence: set(sequence).intersection(other),
-        None
+        "intersection", lambda sequence: set(sequence).intersection(other), None
     )
 
 
@@ -414,9 +407,7 @@ def difference_t(other):
     :return: transformation
     """
     return Transformation(
-        'difference',
-        lambda sequence: set(sequence).difference(other),
-        None
+        "difference", lambda sequence: set(sequence).difference(other), None
     )
 
 
@@ -427,9 +418,9 @@ def symmetric_difference_t(other):
     :return: transformation
     """
     return Transformation(
-        'symmetric_difference',
+        "symmetric_difference",
         lambda sequence: set(sequence).symmetric_difference(other),
-        None
+        None,
     )
 
 
@@ -445,7 +436,7 @@ def group_by_key_impl(sequence):
             result.get(element[0]).append(element[1])
         else:
             result[element[0]] = [element[1]]
-    return six.viewitems(result)
+    return result.items()
 
 
 def group_by_key_t():
@@ -453,11 +444,7 @@ def group_by_key_t():
     Transformation for Sequence.group_by_key
     :return: transformation
     """
-    return Transformation(
-        'group_by_key',
-        group_by_key_impl,
-        None
-    )
+    return Transformation("group_by_key", group_by_key_impl, None)
 
 
 def reduce_by_key_impl(func, sequence):
@@ -473,7 +460,7 @@ def reduce_by_key_impl(func, sequence):
             result[key] = func(result[key], value)
         else:
             result[key] = value
-    return six.viewitems(result)
+    return result.items()
 
 
 def reduce_by_key_t(func):
@@ -483,22 +470,9 @@ def reduce_by_key_t(func):
     :return: transformation
     """
     return Transformation(
-        'reduce_by_key({0})'.format(name(func)),
-        partial(reduce_by_key_impl, func),
-        None
+        "reduce_by_key({0})".format(name(func)), partial(reduce_by_key_impl, func), None
     )
 
-def _accumulate(sequence, func):
-    """
-    Python2 accumulate implementation taken from
-    https://docs.python.org/3/library/itertools.html#itertools.accumulate
-    """
-    iterator = iter(sequence)
-    total = next(iterator)
-    yield total
-    for element in iterator:
-        total = func(total, element)
-        yield total
 
 def accumulate_impl(func, sequence):
     # pylint: disable=no-name-in-module
@@ -507,21 +481,19 @@ def accumulate_impl(func, sequence):
     :param sequence: sequence to accumulate
     :param func: accumulate function
     """
-    if six.PY3:
-        from itertools import accumulate
-        return accumulate(sequence, func)
-    else:
-        return _accumulate(sequence, func)
+    from itertools import accumulate
+
+    return accumulate(sequence, func)
+
 
 def accumulate_t(func):
     """
     Transformation for Sequence.accumulate
     """
     return Transformation(
-        'accumulate({0})'.format(name(func)),
-        partial(accumulate_impl, func),
-        None
+        "accumulate({0})".format(name(func)), partial(accumulate_impl, func), None
     )
+
 
 def count_by_key_impl(sequence):
     """
@@ -532,7 +504,7 @@ def count_by_key_impl(sequence):
     counter = collections.Counter()
     for key, _ in sequence:
         counter[key] += 1
-    return six.viewitems(counter)
+    return counter.items()
 
 
 def count_by_key_t():
@@ -540,11 +512,7 @@ def count_by_key_t():
     Transformation for Sequence.count_by_key
     :return: transformation
     """
-    return Transformation(
-        'count_by_key',
-        count_by_key_impl,
-        None
-    )
+    return Transformation("count_by_key", count_by_key_impl, None)
 
 
 def count_by_value_impl(sequence):
@@ -556,7 +524,7 @@ def count_by_value_impl(sequence):
     counter = collections.Counter()
     for e in sequence:
         counter[e] += 1
-    return six.viewitems(counter)
+    return counter.items()
 
 
 def count_by_value_t():
@@ -564,11 +532,7 @@ def count_by_value_t():
     Transformation for Sequence.count_by_value
     :return: transformation
     """
-    return Transformation(
-        'count_by_value',
-        count_by_value_impl,
-        None
-    )
+    return Transformation("count_by_value", count_by_value_impl, None)
 
 
 def group_by_impl(func, sequence):
@@ -584,7 +548,7 @@ def group_by_impl(func, sequence):
             result.get(func(element)).append(element)
         else:
             result[func(element)] = [element]
-    return six.viewitems(result)
+    return result.items()
 
 
 def group_by_t(func):
@@ -594,9 +558,7 @@ def group_by_t(func):
     :return: transformation
     """
     return Transformation(
-        'group_by({0})'.format(name(func)),
-        partial(group_by_impl, func),
-        None
+        "group_by({0})".format(name(func)), partial(group_by_impl, func), None
     )
 
 
@@ -625,9 +587,7 @@ def grouped_t(wrap, size):
     :return: transformation
     """
     return Transformation(
-        'grouped({0})'.format(size),
-        partial(grouped_impl, wrap, size),
-        None
+        "grouped({0})".format(size), partial(grouped_impl, wrap, size), None
     )
 
 
@@ -643,7 +603,7 @@ def sliding_impl(wrap, size, step, sequence):
     i = 0
     n = len(sequence)
     while i + size <= n or (step != 1 and i < n):
-        yield wrap(sequence[i: i + size])
+        yield wrap(sequence[i : i + size])
         i += step
 
 
@@ -656,9 +616,9 @@ def sliding_t(wrap, size, step):
     :return: transformation
     """
     return Transformation(
-        'sliding({0}, {1})'.format(size, step),
+        "sliding({0}, {1})".format(size, step),
         partial(sliding_impl, wrap, size, step),
-        {ExecutionStrategies.PRE_COMPUTE}
+        {ExecutionStrategies.PRE_COMPUTE},
     )
 
 
@@ -682,9 +642,7 @@ def partition_t(wrap, func):
     :return: transformation
     """
     return Transformation(
-        'partition({0})'.format(name(func)),
-        partial(partition_impl, wrap, func),
-        None
+        "partition({0})".format(name(func)), partial(partition_impl, wrap, func), None
     )
 
 
@@ -705,7 +663,7 @@ def inner_join_impl(other, sequence):
     for k in keys:
         if k in seq_kv and k in other_kv:
             result[k] = (seq_kv[k], other_kv[k])
-    return six.viewitems(result)
+    return result.items()
 
 
 def join_impl(other, join_type, sequence):
@@ -734,7 +692,7 @@ def join_impl(other, join_type, sequence):
     result = {}
     for k in keys:
         result[k] = (seq_kv.get(k), other_kv.get(k))
-    return six.viewitems(result)
+    return result.items()
 
 
 def join_t(other, join_type):
@@ -746,7 +704,5 @@ def join_t(other, join_type):
     :return: transformation
     """
     return Transformation(
-        '{0}_join'.format(join_type),
-        partial(join_impl, other, join_type),
-        None
+        "{0}_join".format(join_type), partial(join_impl, other, join_type), None
     )

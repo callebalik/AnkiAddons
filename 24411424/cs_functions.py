@@ -1,8 +1,21 @@
 import re
 import anki
-from aqt.utils import tooltip,showInfo
+from aqt.utils import tooltip, showInfo
+try:
+    from aqt.utils import (
+            HelpPage,
+            TR,
+            tr,
+            )
+except:
+    pass
 from aqt.qt import *
 from aqt import mw
+try:
+    from aqt.operations.card import set_card_deck
+except:
+    pass
+
 
 def get_version():
     """Return the integer subversion of Anki on which the addon is run ("2.1.11" -> 11)"""
@@ -36,6 +49,16 @@ to a cloze type first, via Edit>Change Note Type."""))
         highest += 1
     highest = max(1, highest)
     self.web.eval("wrap('{{c%d::', '}}');" % highest)
+
+#If the shortcut has "+++" in it for multiple duplications,
+#Truncate the shortcut from that point to get the original name
+def normalizeShortcutName(scut):
+    prefix_idx = scut.find('+++')
+    if scut.find('+++') != -1:
+        # If the multiple duplicates "+++" is found,
+        # truncate the shortcut to the proper name
+        scut = scut[:prefix_idx]
+    return scut
 
 #Converts json shortcuts into functions for the reviewer
 #sToF: shortcutToFunction
@@ -79,8 +102,20 @@ def review_sToF(self,scut):
         sdict["reviewer seek forward"] = self.on_seek_forward
     if get_version() >= 33:
         sdict["reviewer more options"] = self.showContextMenu
+    if get_version() >= 41:
+        sdict["reviewer set due date"] = self.on_set_due
+    if get_version() >= 45:
+        sdict["reviewer card info"] = self.on_card_info
+        sdict["reviewer set flag 5"] = lambda: self.setFlag(5)
+        sdict["reviewer set flag 6"] = lambda: self.setFlag(6)
+        sdict["reviewer set flag 7"] = lambda: self.setFlag(7)
+    if get_version() >= 48:
+        sdict["reviewer previous card info"] = self.on_previous_card_info
 
-    return sdict[scut]
+    scut = normalizeShortcutName(scut)
+    if scut in sdict:
+        return sdict[scut]
+    return None
 
 #Converts json shortcuts into functions for the reviewer
 #sToF: shortcutToFunction
@@ -106,8 +141,63 @@ def editor_sToF(self,scut):
             "editor insert mathjax block": (self.insertMathjaxBlock,),
             "editor html edit": (self.onHtmlEdit,),
             "editor focus tags": (self.onFocusTags, True),
+            "editor toggle sticky current": (self.csToggleStickyCurrent,),
+            "editor toggle sticky all": (self.csToggleStickyAll,),
+
+
         }
-    return sdict[scut]
+    if get_version() >= 45:
+        sdict.update({
+            "editor html edit": (lambda:
+                self.web.eval(
+                    """{const currentField = getCurrentField(); if (currentField) { currentField.toggleHtmlEdit(); }}"""
+                ), ),
+            "editor block indent": (lambda:
+                self.web.eval(
+                    """ document.execCommand("indent"); """
+                ), ),
+            "editor block outdent": (lambda:
+                self.web.eval(
+                    """ document.execCommand("outdent") """
+                ), ),
+            "editor list insert unordered": (lambda:
+                self.web.eval(
+                    """ document.execCommand("insertUnorderedList"); """
+                ), ),
+            "editor list insert ordered": (lambda:
+                self.web.eval(
+                    """ document.execCommand("insertOrderedList"); """
+                ), ),
+                })
+
+    scut = normalizeShortcutName(scut)
+    if scut in sdict:
+        return sdict[scut]
+    return None
+
+def editor_changeDeck(self):
+        if not self.card:
+            return
+        from aqt.studydeck import StudyDeck
+        cid = self.card.id
+        did = self.card.did
+        current = self.mw.col.decks.get(did)["name"]
+        ret = StudyDeck(
+                self.mw,
+                current=current,
+                accept=tr(TR.BROWSING_MOVE_CARDS),
+                title=tr(TR.BROWSING_CHANGE_DECK),
+                help=HelpPage.BROWSING,
+                parent=self.mw,
+                )
+        if not ret.name:
+            return
+        did = self.mw.col.decks.id(ret.name)
+        try:
+            set_card_deck(parent=self.widget, card_ids=[cid], deck_id=did).run_in_background()
+        except:
+            self.mw.col.set_deck([cid], did)
+
 
 #Performs a preliminary check for if any filter is saved before removing it
 def remove_filter(self):

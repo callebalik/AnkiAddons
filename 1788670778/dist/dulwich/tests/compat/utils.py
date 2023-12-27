@@ -30,19 +30,20 @@ import subprocess
 import sys
 import tempfile
 import time
+from typing import Tuple
 
-from dulwich.repo import Repo
-from dulwich.protocol import TCP_GIT_PORT
+from dulwich.tests import SkipTest, TestCase
 
-from dulwich.tests import (
-    SkipTest,
-    TestCase,
-    )
+from ...protocol import TCP_GIT_PORT
+from ...repo import Repo
 
-_DEFAULT_GIT = 'git'
+_DEFAULT_GIT = "git"
 _VERSION_LEN = 4
-_REPOS_DATA_DIR = os.path.abspath(os.path.join(
-    os.path.dirname(__file__), os.pardir, 'data', 'repos'))
+_REPOS_DATA_DIR = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__), os.pardir, os.pardir, os.pardir,
+        "testdata", "repos")
+)
 
 
 def git_version(git_path=_DEFAULT_GIT):
@@ -55,14 +56,14 @@ def git_version(git_path=_DEFAULT_GIT):
         None if no git installation was found.
     """
     try:
-        output = run_git_or_fail(['--version'], git_path=git_path)
+        output = run_git_or_fail(["--version"], git_path=git_path)
     except OSError:
         return None
-    version_prefix = b'git version '
+    version_prefix = b"git version "
     if not output.startswith(version_prefix):
         return None
 
-    parts = output[len(version_prefix):].split(b'.')
+    parts = output[len(version_prefix) :].split(b".")
     nums = []
     for part in parts:
         try:
@@ -80,7 +81,7 @@ def require_git_version(required_version, git_path=_DEFAULT_GIT):
 
     Args:
       required_version: A tuple of ints of the form (major, minor, point,
-        sub-point); ommitted components default to 0.
+        sub-point); omitted components default to 0.
       git_path: Path to the git executable; defaults to the version in
         the system path.
     Raises:
@@ -89,12 +90,15 @@ def require_git_version(required_version, git_path=_DEFAULT_GIT):
     """
     found_version = git_version(git_path=git_path)
     if found_version is None:
-        raise SkipTest('Test requires git >= %s, but c git not found' %
-                       (required_version, ))
+        raise SkipTest(
+            "Test requires git >= {}, but c git not found".format(required_version)
+        )
 
     if len(required_version) > _VERSION_LEN:
-        raise ValueError('Invalid version tuple %s, expected %i parts' %
-                         (required_version, _VERSION_LEN))
+        raise ValueError(
+            "Invalid version tuple %s, expected %i parts"
+            % (required_version, _VERSION_LEN)
+        )
 
     required_version = list(required_version)
     while len(found_version) < len(required_version):
@@ -102,14 +106,17 @@ def require_git_version(required_version, git_path=_DEFAULT_GIT):
     required_version = tuple(required_version)
 
     if found_version < required_version:
-        required_version = '.'.join(map(str, required_version))
-        found_version = '.'.join(map(str, found_version))
-        raise SkipTest('Test requires git >= %s, found %s' %
-                       (required_version, found_version))
+        required_version = ".".join(map(str, required_version))
+        found_version = ".".join(map(str, found_version))
+        raise SkipTest(
+            "Test requires git >= {}, found {}".format(required_version, found_version)
+        )
 
 
-def run_git(args, git_path=_DEFAULT_GIT, input=None, capture_stdout=False,
-            **popen_kwargs):
+def run_git(
+    args, git_path=_DEFAULT_GIT, input=None, capture_stdout=False,
+    capture_stderr=False, **popen_kwargs
+):
     """Run a git command.
 
     Input is piped from the input parameter and output is sent to the standard
@@ -122,35 +129,44 @@ def run_git(args, git_path=_DEFAULT_GIT, input=None, capture_stdout=False,
       capture_stdout: Whether to capture and return stdout.
       popen_kwargs: Additional kwargs for subprocess.Popen;
         stdin/stdout args are ignored.
-    Returns: A tuple of (returncode, stdout contents). If capture_stdout is
-        False, None will be returned as stdout contents.
+    Returns: A tuple of (returncode, stdout contents, stderr contents).
+        If capture_stdout is False, None will be returned as stdout contents.
+        If capture_stderr is False, None will be returned as stderr contents.
     Raises:
       OSError: if the git executable was not found.
     """
 
-    env = popen_kwargs.pop('env', {})
-    env['LC_ALL'] = env['LANG'] = 'C'
+    env = popen_kwargs.pop("env", {})
+    env["LC_ALL"] = env["LANG"] = "C"
+    env["PATH"] = os.getenv("PATH")
 
     args = [git_path] + args
-    popen_kwargs['stdin'] = subprocess.PIPE
+    popen_kwargs["stdin"] = subprocess.PIPE
     if capture_stdout:
-        popen_kwargs['stdout'] = subprocess.PIPE
+        popen_kwargs["stdout"] = subprocess.PIPE
     else:
-        popen_kwargs.pop('stdout', None)
+        popen_kwargs.pop("stdout", None)
+    if capture_stderr:
+        popen_kwargs["stderr"] = subprocess.PIPE
+    else:
+        popen_kwargs.pop("stderr", None)
     p = subprocess.Popen(args, env=env, **popen_kwargs)
     stdout, stderr = p.communicate(input=input)
-    return (p.returncode, stdout)
+    return (p.returncode, stdout, stderr)
 
 
 def run_git_or_fail(args, git_path=_DEFAULT_GIT, input=None, **popen_kwargs):
     """Run a git command, capture stdout/stderr, and fail if git fails."""
-    if 'stderr' not in popen_kwargs:
-        popen_kwargs['stderr'] = subprocess.STDOUT
-    returncode, stdout = run_git(args, git_path=git_path, input=input,
-                                 capture_stdout=True, **popen_kwargs)
+    if "stderr" not in popen_kwargs:
+        popen_kwargs["stderr"] = subprocess.STDOUT
+    returncode, stdout, stderr = run_git(
+        args, git_path=git_path, input=input, capture_stdout=True,
+        capture_stderr=True, **popen_kwargs
+    )
     if returncode != 0:
-        raise AssertionError("git with args %r failed with %d: %r" % (
-            args, returncode, stdout))
+        raise AssertionError(
+            "git with args %r failed with %d: stdout=%r stderr=%r" % (args, returncode, stdout, stderr)
+        )
     return stdout
 
 
@@ -168,10 +184,9 @@ def import_repo_to_dir(name):
     temp_dir = tempfile.mkdtemp()
     export_path = os.path.join(_REPOS_DATA_DIR, name)
     temp_repo_dir = os.path.join(temp_dir, name)
-    export_file = open(export_path, 'rb')
-    run_git_or_fail(['init', '--quiet', '--bare', temp_repo_dir])
-    run_git_or_fail(['fast-import'], input=export_file.read(),
-                    cwd=temp_repo_dir)
+    export_file = open(export_path, "rb")
+    run_git_or_fail(["init", "--quiet", "--bare", temp_repo_dir])
+    run_git_or_fail(["fast-import"], input=export_file.read(), cwd=temp_repo_dir)
     export_file.close()
     return temp_repo_dir
 
@@ -194,12 +209,12 @@ def check_for_daemon(limit=10, delay=0.1, timeout=0.1, port=TCP_GIT_PORT):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(delay)
         try:
-            s.connect(('localhost', port))
+            s.connect(("localhost", port))
             return True
         except socket.timeout:
             pass
-        except socket.error as e:
-            if getattr(e, 'errno', False) and e.errno != errno.ECONNREFUSED:
+        except OSError as e:
+            if getattr(e, "errno", False) and e.errno != errno.ECONNREFUSED:
                 raise
             elif e.args[0] != errno.ECONNREFUSED:
                 raise
@@ -215,10 +230,10 @@ class CompatTestCase(TestCase):
     min_git_version.
     """
 
-    min_git_version = (1, 5, 0)
+    min_git_version: Tuple[int, ...] = (1, 5, 0)
 
     def setUp(self):
-        super(CompatTestCase, self).setUp()
+        super().setUp()
         require_git_version(self.min_git_version)
 
     def assertObjectStoreEqual(self, store1, store2):
@@ -250,11 +265,13 @@ class CompatTestCase(TestCase):
         def cleanup():
             repo.close()
             rmtree_ro(os.path.dirname(path.rstrip(os.sep)))
+
         self.addCleanup(cleanup)
         return repo
 
 
-if sys.platform == 'win32':
+if sys.platform == "win32":
+
     def remove_ro(action, name, exc):
         os.chmod(name, stat.S_IWRITE)
         os.remove(name)

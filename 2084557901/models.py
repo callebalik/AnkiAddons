@@ -25,14 +25,14 @@ from abc import ABC
 import inspect
 import re
 from textwrap import dedent
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Type
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Type
 import sys
 
 import aqt
 from aqt.utils import askUser, showInfo
 from anki.consts import MODEL_CLOZE
-from anki.models import Template as AnkiTemplate
-from anki.models import NoteType as AnkiModel
+from anki.models import TemplateDict as AnkiTemplate
+from anki.models import NotetypeDict as AnkiModel
 
 
 class TemplateData(ABC):
@@ -48,7 +48,7 @@ class TemplateData(ABC):
         "Create and return an Anki template object for this model definition."
         assert aqt.mw is not None, "Tried to use models before Anki is initialized!"
         mm = aqt.mw.col.models
-        t = mm.newTemplate(cls.name)
+        t = mm.new(cls.name)
         t['qfmt'] = dedent(cls.front).strip()
         t['afmt'] = dedent(cls.back).strip()
         return t
@@ -77,8 +77,8 @@ class ModelData(ABC):
         mm = aqt.mw.col.models
         model = mm.new(cls.name)
         for i in cls.fields:
-            field = mm.newField(i)
-            mm.addField(model, field)
+            field = mm.new_field(i)
+            mm.add_field(model, field)
         for template in cls.templates:
             t = template.to_template()
             mm.addTemplate(model, t)
@@ -104,7 +104,7 @@ class ModelData(ABC):
         Returns the new version the model is at.
         """
         assert aqt.mw is not None, "Tried to use models before Anki is initialized!"
-        model = aqt.mw.col.models.byName(cls.name)
+        model = aqt.mw.col.models.by_name(cls.name)
 
         at_version = current_version
         for cur_ver, new_ver, func in cls.upgrades:
@@ -123,7 +123,7 @@ class ModelData(ABC):
         """
         assert aqt.mw is not None, "Tried to use models before Anki is initialized!"
         mm = aqt.mw.col.models
-        model = mm.byName(cls.name)
+        model = mm.by_name(cls.name)
         return model is not None
 
     @classmethod
@@ -144,11 +144,11 @@ class ModelData(ABC):
         return current_version == cls.version
 
 
-def upgrade_onethreeoh(mod):
+def upgrade_none_to_onethreeoh(mod):
     "Upgrade LPCG model from unversioned to version 1.3.0."
     mm = aqt.mw.col.models
-    field = mm.newField("Prompt")
-    mm.addField(mod, field)
+    field = mm.new_field("Prompt")
+    mm.add_field(mod, field)
 
     if '.nightMode .cloze' not in mod['css']:
         mod['css'] += "\n\n"
@@ -175,11 +175,30 @@ def upgrade_onethreeoh(mod):
     )
 
 
+def upgrade_onethreeoh_to_onefouroh(mod):
+    "Upgrade LPCG model from 1.3.0 to version 1.4.0."
+    mm = aqt.mw.col.models
+    mm.add_field(mod, mm.new_field("Author"))
+
+    mod['css'] = mod['css'].replace('.title {', '.title, .author {')
+
+    assert len(mod['tmpls']) == 1, "LPCG note type has extra templates!"
+    for side in ['qfmt', 'afmt']:
+        mod['tmpls'][0][side] = mod['tmpls'][0][side].replace(
+            '<div class="title">{{Title}} {{Sequence}}</div>',
+            dedent('''
+                <div class="title">{{Title}} {{Sequence}}</div>
+                {{#Author}}<div class="author">{{Author}}</div>{{/Author}}
+            ''').strip()
+        )
+
+
 class LpcgOne(ModelData):
     class LpcgOneTemplate(TemplateData):
         name = "LPCG1"
         front = """
             <div class="title">{{Title}} {{Sequence}}</div>
+            {{#Author}}<div class="author">{{Author}}</div>{{/Author}}
 
             <br>
 
@@ -193,6 +212,7 @@ class LpcgOne(ModelData):
         """
         back = """
             <div class="title">{{Title}} {{Sequence}}</div>
+            {{#Author}}<div class="author">{{Author}}</div>{{/Author}}
 
             <br>
 
@@ -203,7 +223,7 @@ class LpcgOne(ModelData):
         """
 
     name = "LPCG 1.0"
-    fields = ("Line", "Context", "Title", "Sequence", "Prompt")
+    fields = ("Line", "Context", "Title", "Author", "Sequence", "Prompt")
     templates = (LpcgOneTemplate,)
     styling = """
         .card {
@@ -234,7 +254,7 @@ class LpcgOne(ModelData):
             filter: invert(85%);
         }
 
-        .title {
+        .title, .author {
             text-align: center;
             font-size: small;
         }
@@ -245,9 +265,10 @@ class LpcgOne(ModelData):
     """
     sort_field = "Sequence"
     is_cloze = False
-    version = "1.3.0"
+    version = "1.4.0"
     upgrades = (
-        ("none", "1.3.0", upgrade_onethreeoh),
+        ("none", "1.3.0", upgrade_none_to_onethreeoh),
+        ("1.3.0", "1.4.0", upgrade_onethreeoh_to_onefouroh),
     )
 
 

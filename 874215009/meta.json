@@ -1,1 +1,1 @@
-{"name": "Advanced Browser", "mod": 1604833387, "disabled": false, "conflicts": [], "max_point_version": 35, "min_point_version": 35, "branch_index": 2, "config": {"Show internal fields": false, "Table content": "Editable", "Use a single list for fields": false}}
+{"name": "Advanced Browser", "mod": 1688241357, "disabled": false, "conflicts": [], "max_point_version": -66, "min_point_version": 45, "branch_index": 4, "config": {"Show internal fields": false, "Table content": "Editable", "Use a single list for fields": false}, "update_enabled": true}

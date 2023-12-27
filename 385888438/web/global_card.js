@@ -1,318 +1,310 @@
-window.EFDRC = {}
+(function () {
+  window.EFDRC = {}
+  const EFDRC = window.EFDRC
+  EFDRC.shortcuts = []
 
-EFDRC.CTRL = "%(ctrl)s"; //bool
-EFDRC.PASTE = "%(paste)s"; //bool
-EFDRC.SPAN = "%(span)s"; //bool
-EFDRC.REMSPAN = "%(remove_span)s"; //bool
-EFDRC.SPECIAL = JSON.parse(`%(special)s`) //array of array
-
-EFDRC.specials_noctrl = {
-    //shift, alt, key, command, has arg?
-    "strikethrough": [true, true, "Digit5", "strikeThrough", false],
-    "fontcolor": [false, false, "F7", "foreColor", true]
-};
-
-EFDRC.specials_ctrl = {
-    //shift, alt, key, command, has arg
-    "removeformat": [false, false, "KeyR", "removeFormat", false],
-    "highlight": [true, false, "KeyB", "hiliteColor", true],
-    "subscript": [false, false, "Equal", "subscript", false],
-    "superscript": [true, false, "Equal", "superscript", false],
-    "formatblock": [false, false, "Period", "formatBlock", true],
-    "hyperlink": [true, false, "KeyH", "createLink", false],
-    "unhyperlink": [true, true, "KeyH", "createLink", false],
-    "unorderedlist": [false, false, "BracketLeft", "insertUnorderedList", false],
-    "orderedlist": [false, false, "BracketRight", "insertOrderedList", false],
-    "indent": [true, false, "BracketRight", "indent", false],
-    "outdent": [true, false, "BracketLeft", "outdent", false],
-    "justifyCenter": [true, true, "KeyS", "justifyCenter", false],
-    "justifyLeft": [true, true, "KeyL", "justifyLeft", false],
-    "justifyRight": [true, true, "KeyR", "justifyRight", false],
-    "justifyFull": [true, true, "KeyB", "justifyFull", false],
-};
-
-//wrappedExceptForWhitespace, wrapInternal from /anki/editor.ts
-EFDRC.wrappedExceptForWhitespace = function (text, front, back) {
-    var match = text.match(/^(\s*)([^]*?)(\s*)$/);
-    return match[1] + front + match[2] + back + match[3];
-}
-
-EFDRC.wrapInternal = function (front, back) {
-    if (document.activeElement.dir === "rtl") {
-        front = "&#8235;" + front + "&#8236;";
-        back = "&#8235;" + back + "&#8236;";
+  const removeSpan = function (el) {
+    // removes all span code because depending on the note type
+    // pressing backspace can wrap the text in span and apply different styling.
+    const elems = el.getElementsByTagName('span')
+    for (let x = 0; x < elems.length; x++) {
+      const span = elems[x]
+      const children = span.childNodes
+      for (let y = 0; y < children.length; y++) {
+        // insert after node so caret position is maintained. If last sibling, inserted at end.
+        span.parentNode.insertBefore(children[y], span.nextSibling)
+      }
+      span.parentNode.removeChild(span)
     }
-    const s = window.getSelection();
-    let r = s.getRangeAt(0);
-    const content = r.cloneContents();
-    const span = document.createElement("span");
-    span.appendChild(content);
-    const new_ = EFDRC.wrappedExceptForWhitespace(span.innerText, front, back);
-    document.execCommand("inserttext", false, new_);
-    if (!span.innerHTML) {
-        // run with an empty selection; move cursor back past postfix
-        r = s.getRangeAt(0);
-        r.setStart(r.startContainer, r.startOffset - back.length);
-        r.collapse(true);
-        s.removeAllRanges();
-        s.addRange(r);
+  }
+
+  const wrapCloze = function (event, el, altKey) {
+    let highest = 0
+    const val = el.innerHTML
+    let m
+    const myRe = /\{\{c(\d+)::/g
+    while ((m = myRe.exec(val)) !== null) {
+      highest = Math.max(highest, m[1])
     }
-}
+    if (!altKey) {
+      highest += 1
+    }
+    highest = Math.max(1, highest)
+    EFDRC.wrapInternal(el, '{{c' + highest + '::', '}}', false)
+    event.preventDefault()
+  }
 
-EFDRC.b64DecodeUnicode = function (str) {
-    return decodeURIComponent(atob(str).split('').map(function (c) {
-        return '%%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-    }).join(''));
-}
+  const ctrlLinkEnable = function () {
+    const links = document.querySelectorAll('[data-EFDRCfield] a')
+    for (const el of links) {
+      el.setAttribute('contenteditable', 'false')
+    }
+  }
 
-EFDRC.removeSpan = function (el) {
-    //removes all span code because depending on the note type
-    //pressing backspace can wrap the text in span and apply different styling.
-    var elems = el.getElementsByTagName("span");
-    for (var x = 0; x < elems.length; x++) {
-        var span = elems[x];
-        var children = span.childNodes;
-        for (var y = 0; y < children.length; y++) {
-            //insert after node so caret position is maintained. If last sibling, inserted at end.
-            span.parentNode.insertBefore(children[y], span.nextSibling);
+  const ctrlLinkDisable = function () {
+    const links = document.querySelectorAll("[data-EFDRCfield] a[contenteditable='false']")
+    for (const el of links) {
+      el.removeAttribute('contenteditable')
+    }
+  }
+
+  const b64DecodeUnicode = function (str) {
+    return decodeURIComponent(window.atob(str).split('').map(function (c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+    }).join(''))
+  }
+
+  /* Event Handlers */
+  EFDRC.handlePaste = function (e) {
+    if (!EFDRC.CONF.process_paste) {
+      return
+    }
+    const paste = (e.clipboardData || window.clipboardData)
+    if (paste.types.length === 0 || (paste.types.length === 1 && paste.types[0] === 'text/plain')) {
+      return
+    }
+    e.preventDefault()
+    window.pycmd('EFDRC!paste') // python code accesses clipboard
+  }
+
+  EFDRC.handleKeydown = function (ev, target) {
+    for (const scutInfo of EFDRC.shortcuts) {
+      if (matchShortcut(ev, scutInfo)) {
+        const handled = scutInfo.handler(ev, target)
+        if (handled !== -1) {
+          ev.preventDefault()
         }
-        span.parentNode.removeChild(span);
+      }
     }
-}
+    if (isCtrlKey(ev.code)) EFDRC.ctrldown()
+    ev.stopPropagation()
+  }
 
-EFDRC.handlePaste = function (e) {
-    var mimetype = ["text/html", "image/", "video/", "audio/", "application/"];
-    var paste = (e.clipboardData || window.clipboardData);
-    for (var x = 0; x < paste.types.length; x++) {
-        var mtype = paste.types[x];
-        var to_send = false;
-        for (var y = 0; y < mimetype.length; y++) {
-            if (mtype.indexOf(mimetype[y]) != -1) {
-                to_send = true;
-                break;
-            }
+  EFDRC.handleKeyUp = (ev, target) => {
+    if (isCtrlKey(ev.code)) EFDRC.ctrlup()
+    ev.stopPropagation()
+  }
+  EFDRC.handleKeyPress = (ev, target) => {
+    ev.stopPropagation()
+  }
+
+  EFDRC.handleFocus = function (event, target) {
+    if (typeof window.showTooltip === 'function' && typeof window.showTooltip2 === 'undefined') {
+      // Disable Popup Dictionary addon tooltip on double mouse click.
+      // Using hotkey should still work however.
+      window.showTooltip2 = window.showTooltip
+      window.showTooltip = function (event, tooltip, element) {
+        EFDRC.tooltip = {
+          ev: event,
+          tt: tooltip,
+          el: element
         }
-        if (to_send) {
-            e.preventDefault();
-            pycmd("EFDRC!paste"); //python code accesses clipboard
-            break;
-        }
+      }
+      window.showTooltip.hide = function () { }
+      window.invokeTooltipAtSelectedElm2 = window.invokeTooltipAtSelectedElm
+      window.invokeTooltipAtSelectedElm = function () {
+        window.invokeTooltipAtSelectedElm2()
+        window.showTooltip2(EFDRC.tooltip.ev, EFDRC.tooltip.tt, EFDRC.tooltip.el)
+      }
     }
-}
+    const fld = target.getAttribute('data-EFDRCfield')
+    window.pycmd('EFDRC!focuson#' + fld)
+  }
 
-EFDRC.ctrldown = function () {
-    EFDRC.ctrlLinkEnable();
-    if (EFDRC.CTRL) {
-        els = document.querySelectorAll("[data-EFDRC='true']");
-        for (var e = 0; e < els.length; e++) {
-            var el = els[e];
-            el.setAttribute("contenteditable", "true");
-            if (el.hasAttribute("data-EFDRCnotctrl")) {
-                el.removeAttribute("data-EFDRCnotctrl");
-            }
-        }
-    }
-}
-
-EFDRC.ctrlup = function () {
-    EFDRC.ctrlLinkDisable();
-    if (EFDRC.CTRL) {
-        var els = document.querySelectorAll("[data-EFDRC='true']");
-        for (var e = 0; e < els.length; e++) {
-            var el = els[e];
-            if (el == document.activeElement) {
-                el.setAttribute("data-EFDRCnotctrl", "true");
-            } else {
-                el.setAttribute("contenteditable", "false");
-            }
-        }
-    }
-}
-
-EFDRC.placeholder = function(e){
-    fld_name = EFDRC.b64DecodeUnicode(e.getAttribute("data-EFDRCfield"))
-    e.setAttribute("data-placeholder", fld_name)
-}
-
-EFDRC.addListeners = function (e, fld) {
-    if (EFDRC.PASTE) {
-        e.addEventListener('paste', EFDRC.handlePaste);
+  EFDRC.handleBlur = function (event, target) {
+    if (typeof showTooltip2 === 'function') {
+      // Restore Popup Dictionary
+      window.showTooltip = window.showTooltip2
+      delete window.showTooltip2
+      window.invokeTooltipAtSelectedElm = window.invokeTooltipAtSelectedElm2
+      delete window.invokeTooltipAtSelectedElm2
     }
 
-    e.addEventListener('focus', function (event) {
-        if (typeof showTooltip == "function" && typeof showTooltip2 == "undefined") {
-            // Disable Popup Dictionary addon tooltip on double mouse click.
-            // Using hotkey should still work however.
-            showTooltip2 = showTooltip;
-            showTooltip = function (event, tooltip, element) {
-                EFDRC.tooltip = {
-                    ev: event,
-                    tt: tooltip,
-                    el: element
-                };
-            };
-            showTooltip.hide = function () { };
-            invokeTooltipAtSelectedElm2 = invokeTooltipAtSelectedElm;
-            invokeTooltipAtSelectedElm = function () {
-                invokeTooltipAtSelectedElm2();
-                showTooltip2(EFDRC.tooltip.ev, EFDRC.tooltip.tt, EFDRC.tooltip.el);
-            }
-        }
+    const el = target
+    if (EFDRC.CONF.remove_span) {
+      removeSpan(el)
+    }
+    el.setAttribute('contenteditable', 'false')
+    if (el.hasAttribute('data-EFDRCnid')) {
+      EFDRC.cleanResize(el)
+      window.pycmd('EFDRC#' + el.getAttribute('data-EFDRCnid') + '#' + el.getAttribute('data-EFDRCfield') + '#' + el.innerHTML)
+    }
+    window.pycmd('EFDRC!reload')
+  }
 
-        pycmd("EFDRC!focuson#" + fld);
-    })
-    e.addEventListener('blur', function (event) {
-        if (typeof showTooltip2 == "function") {
-            // Restore Popup Dictionary 
-            showTooltip = showTooltip2;
-            delete showTooltip2;
-            invokeTooltipAtSelectedElm = invokeTooltipAtSelectedElm2;
-            delete invokeTooltipAtSelectedElm2;
-        }
+  /* Shortcuts */
+  const specialCharCodes = {
+    '-': 'minus',
+    '=': 'equal',
+    '[': 'bracketleft',
+    ']': 'bracketright',
+    ';': 'semicolon',
+    "'": 'quote',
+    '`': 'backquote',
+    '\\': 'backslash',
+    ',': 'comma',
+    '.': 'period',
+    '/': 'slash'
+  }
 
-        var el = event.currentTarget;
-        if (EFDRC.REMSPAN) {
-            EFDRC.removeSpan(el);
+  const registerShortcut = function (shortcut, handler) {
+    const shortcutKeys = shortcut.toLowerCase().split(/[+]/).map(key => key.trim())
+    const modKeys = ['ctrl', 'shift', 'alt']
+    const scutInfo = {}
+    modKeys.forEach(modKey => { scutInfo[modKey] = shortcutKeys.includes(modKey) })
+    let mainKey = shortcutKeys[shortcutKeys.length - 1]
+    if (mainKey.length === 1) {
+      if (/\d/.test(mainKey)) {
+        mainKey = 'digit' + mainKey
+      } else if (/[a-zA-Z]/.test(mainKey)) {
+        mainKey = 'key' + mainKey
+      } else {
+        const code = specialCharCodes[mainKey]
+        if (code) {
+          mainKey = code
         }
-        if (el.hasAttribute("data-EFDRCnotctrl")) {
-            el.removeAttribute("data-EFDRCnotctrl");
-            el.setAttribute("contenteditable", "false");
-        }
-        if (el.hasAttribute("data-EFDRCnid")) {
-            EFDRC.cleanResize(el)
-            pycmd("EFDRC#" + el.getAttribute("data-EFDRCnid") + "#" + el.getAttribute("data-EFDRCfield") + "#" + el.innerHTML);
-            pycmd("EFDRC!reload");
+      }
+    }
+    scutInfo.key = mainKey
+    scutInfo.handler = handler
+    EFDRC.shortcuts.push(scutInfo)
+  }
+  // Expose registerShortcut to notetype JS
+  EFDRC.registerShortcut = registerShortcut
+
+  const matchShortcut = function (event, scutInfo) {
+    if (scutInfo.key !== event.code.toLowerCase()) return false
+    if (scutInfo.ctrl !== (event.ctrlKey || event.metaKey)) return false
+    if (scutInfo.shift !== event.shiftKey) return false
+    if (scutInfo.alt !== event.altKey) return false
+    return true
+  }
+
+  const registerFormattingShortcut = function () {
+    for (const key in EFDRC.CONF.special_formatting) {
+      const format = EFDRC.CONF.special_formatting[key]
+      if (!format.enabled) {
+        continue
+      }
+      const shortcut = format.shortcut
+      registerShortcut(shortcut, () => {
+        if (format.arg) {
+          document.execCommand(format.command, false, format.arg.value)
         } else {
-            pycmd("EFDRC!reload");
+          document.execCommand(format.command, false)
         }
+      }) // spread args list
+    }
+  }
+
+  const isCtrlKey = function (keycode) {
+    return ['ControlLeft', 'MetaLeft', 'ControlRight', 'MetaRight'].includes(keycode)
+  }
+
+  window.addEventListener('keydown', function (ev) {
+    if (isCtrlKey(ev.code)) {
+      EFDRC.ctrldown()
+    }
+  })
+
+  window.addEventListener('keyup', function (ev) {
+    if (isCtrlKey(ev.code)) {
+      EFDRC.ctrlup()
+    }
+  })
+
+  /* Called from reviewer.py */
+  EFDRC.registerConfig = function (confStr) {
+    EFDRC.CONF = JSON.parse(confStr)
+    EFDRC.CONF.span = (EFDRC.CONF.tag === 'span')
+    EFDRC.resizeImageMode = EFDRC.CONF.resize_image_default_state
+  }
+
+  EFDRC.setupReviewer = function () {
+    // image resizer
+    registerShortcut(EFDRC.CONF.shortcuts['image-resize'], (event) => {
+      EFDRC.resizeImageMode = !EFDRC.resizeImageMode
+      EFDRC.maybeResizeOrClean()
     })
-
-
-    e.addEventListener('keydown', function (event) {
-        //Slightly faster.
-        var ctrlKey = event.ctrlKey || event.metaKey
-        var shiftKey = event.shiftKey;
-        var altKey = event.altKey;
-        var codeKey = event.code;
-        var el = event.currentTarget;
-        if (EFDRC.SPAN) {
-            if (codeKey == "Backspace") {
-                event.stopPropagation();
-            }
-        }
-        if (EFDRC.REMSPAN) {
-            if (codeKey == "Backspace" || codeKey == "Delete") {
-                setTimeout(function () {
-                    EFDRC.removeSpan(el);
-                }, 0)
-            }
-        }
-
-        if (event.code == "KeyS" && event.altKey
-            && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
-            //image resizer
-            EFDRC.resizeImageMode = !EFDRC.resizeImageMode;
-            EFDRC.maybeResizeOrClean()
-            event.preventDefault();
-            event.stopPropagation();
-        }
-
-        if (ctrlKey) {
-            //cloze deletion, onCloze from aqt.editor
-            if (event.code == "KeyC" && shiftKey) {
-                var highest = 0;
-                var val = el.innerHTML;
-                var m;
-                var myRe = /\{\{c(\d+)::/g;
-                while ((m = myRe.exec(val)) !== null) {
-                    highest = Math.max(highest, m[1]);
-                }
-                if (!altKey) {
-                    highest += 1;
-                }
-                var highest = Math.max(1, highest);
-                EFDRC.wrapInternal("{\{c" + highest + "::", "}\}");
-                event.preventDefault();
-            }else{
-
-                //Special formatting that requires ctrl key.
-                for (var special in EFDRC.specials_ctrl) {
-                    specialVal = EFDRC.specials_ctrl[special]
-                    if (specialVal[4]) {
-                        var enabled = EFDRC.SPECIAL[special][0]
-                        var parmVal = EFDRC.SPECIAL[special][1]
-                    } else {
-                        var enabled = EFDRC.SPECIAL[special]
-                    }
-                    if (enabled) {
-                        var s = specialVal[0];
-                        var a = specialVal[1];
-                        var c = specialVal[2];
-                        if (shiftKey == s && altKey == a && codeKey == c) {
-                            if (specialVal[4]) {
-                                document.execCommand(specialVal[3], false, parmVal);
-                            } else {
-                                document.execCommand(specialVal[3], false);
-                            }
-                            event.preventDefault();
-                        }
-                    }
-                }
-            }
-        } else {
-            //Special formatting that doesn't require ctrl key
-            for (var special in EFDRC.specials_noctrl) {
-                specialVal = EFDRC.specials_noctrl[special]
-                if (specialVal[4]) {
-                    var enabled = EFDRC.SPECIAL[special][0]
-                    var parmVal = EFDRC.SPECIAL[special][1]
-                } else {
-                    var enabled = EFDRC.SPECIAL[special]
-                }
-                if (enabled) {
-                    var s = specialVal[0];
-                    var a = specialVal[1];
-                    var c = specialVal[2];
-                    if (shiftKey == s && altKey == a && codeKey == c) {
-                        if (specialVal[4]) {
-                            document.execCommand(specialVal[3], false, parmVal);
-                        } else {
-                            document.execCommand(specialVal[3], false);
-                        }
-                        event.preventDefault();
-                    }
-                }
-            }
-        }
-
+    registerShortcut(EFDRC.CONF.shortcuts.cloze, (event, el) => {
+      wrapCloze(event, el, false)
     })
-}
+    registerShortcut(EFDRC.CONF.shortcuts['cloze-alt'], (event, el) => {
+      wrapCloze(event, el, true)
+    })
+    registerShortcut('Backspace', (event, el) => {
+      if (EFDRC.CONF.span) return
+      if (EFDRC.CONF.remove_span) setTimeout(() => removeSpan(el), 0)
+      return -1
+    })
+    registerShortcut('Delete', (event, el) => {
+      if (EFDRC.CONF.remove_span) setTimeout(() => removeSpan(el), 0)
+      return -1
+    })
+    registerShortcut('Escape', (event, el) => {
+      el.blur()
+    })
+    registerFormattingShortcut()
+  }
 
+  const handlers = [
+    ['onpaste', 'handlePaste'],
+    ['onfocus', 'handleFocus'],
+    ['onblur', 'handleBlur'],
+    ['onkeydown', 'handleKeydown'],
+    ['onkeyup', 'handleKeyUp'],
+    ['onkeypress', 'handleKeyPress']
+  ]
 
-EFDRC.ctrlLinkEnable = function () {
-    links = document.querySelectorAll("[data-EFDRC='true'] a")
-    for (var x = 0; x < links.length; x++) {
-        el = links[x];
-        el.setAttribute("contenteditable", "false");
+  EFDRC.serveCard = function () { // fld: string
+    const els = document.querySelectorAll('[data-EFDRCfield]')
+    for (const el of els) {
+      if (EFDRC.CONF.ctrl_click) {
+        const fldName = b64DecodeUnicode(el.getAttribute('data-EFDRCfield'))
+        el.setAttribute('data-placeholder', fldName)
+      } else {
+        el.setAttribute('contenteditable', 'true')
+      }
+      for (const handlerInfo of handlers) {
+        el.setAttribute(handlerInfo[0], `EFDRC.${handlerInfo[1]}(event, this)`)
+      }
     }
-}
+  }
 
-EFDRC.ctrlLinkDisable = function () {
-    links = document.querySelectorAll("[data-EFDRC='true'] a[contenteditable='false']")
-    for (var x = 0; x < links.length; x++) {
-        el = links[x];
-        el.removeAttribute("contenteditable");
+  EFDRC.ctrldown = function () {
+    if (EFDRC.CONF.ctrl_click) {
+      const els = document.querySelectorAll('[data-EFDRCfield]')
+      for (const el of els) {
+        el.setAttribute('contenteditable', 'true')
+      }
+    } else {
+      ctrlLinkEnable() // Ctrl + Click on a link to click a link
     }
-}
+  }
 
-window.addEventListener('keydown', function (event) {
-    if (["ControlLeft", "MetaLeft"].includes(event.code)) {
-        EFDRC.ctrldown();
+  EFDRC.ctrlup = function () {
+    if (EFDRC.CONF.ctrl_click) {
+      const els = document.querySelectorAll('[data-EFDRCfield]')
+      for (const el of els) {
+        if (el !== document.activeElement) {
+          el.setAttribute('contenteditable', 'false')
+        }
+      }
+    } else {
+      ctrlLinkDisable()
     }
-})
+  }
 
-window.addEventListener('keyup', function (event) {
-    if (["ControlLeft", "MetaLeft"].includes(event.code)) {
-        EFDRC.ctrlup();
+  EFDRC.showRawField = function (encoded, nid, fld) {
+    const val = b64DecodeUnicode(encoded)
+    const elems = document.querySelectorAll(`[data-EFDRCfield='${fld}']`)
+    for (let e = 0; e < elems.length; e++) {
+      const elem = elems[e]
+      if (elem.innerHTML !== val) {
+        elem.innerHTML = val
+      }
+      elem.setAttribute('data-EFDRCnid', nid)
     }
-})
+    EFDRC.maybeResizeOrClean(true)
+  }
+})()

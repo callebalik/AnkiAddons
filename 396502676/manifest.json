@@ -1,0 +1,12 @@
+{
+    "name": "Wrapper meta-addon",
+    "package": "396502676",
+    "ankiweb_id": "396502676",
+    "author": "",
+    "version": "1.4",
+    "homepage": "",
+    "conflicts": [
+        "wrapper"
+    ],
+    "mod": 1690027243
+}

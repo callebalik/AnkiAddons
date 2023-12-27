@@ -24,22 +24,15 @@
 import collections
 import heapq
 from itertools import chain
+from typing import Deque, List, Optional, Set, Tuple
 
-from dulwich.diff_tree import (
-    RENAME_CHANGE_TYPES,
-    tree_changes,
-    tree_changes_for_merge,
-    RenameDetector,
-    )
-from dulwich.errors import (
-    MissingCommitError,
-    )
-from dulwich.objects import (
-    Tag,
-    )
+from .diff_tree import (RENAME_CHANGE_TYPES, RenameDetector, tree_changes,
+                        tree_changes_for_merge)
+from .errors import MissingCommitError
+from .objects import Commit, ObjectID, Tag
 
-ORDER_DATE = 'date'
-ORDER_TOPO = 'topo'
+ORDER_DATE = "date"
+ORDER_TOPO = "topo"
 
 ALL_ORDERS = (ORDER_DATE, ORDER_TOPO)
 
@@ -47,7 +40,7 @@ ALL_ORDERS = (ORDER_DATE, ORDER_TOPO)
 _MAX_EXTRA_COMMITS = 5
 
 
-class WalkEntry(object):
+class WalkEntry:
     """Object encapsulating a single result from a walk."""
 
     def __init__(self, walker, commit):
@@ -86,8 +79,7 @@ class WalkEntry(object):
                     parent = self._store[subtree_sha]
             else:
                 changes_func = tree_changes_for_merge
-                parent = [
-                        self._store[p].tree for p in self._get_parents(commit)]
+                parent = [self._store[p].tree for p in self._get_parents(commit)]
                 if path_prefix:
                     parent_trees = [self._store[p] for p in parent]
                     parent = []
@@ -108,29 +100,36 @@ class WalkEntry(object):
                     self._store.__getitem__,
                     path_prefix,
                 )
-            cached = list(changes_func(
-              self._store, parent, commit_tree_sha,
-              rename_detector=self._rename_detector))
+            cached = list(
+                changes_func(
+                    self._store,
+                    parent,
+                    commit_tree_sha,
+                    rename_detector=self._rename_detector,
+                )
+            )
             self._changes[path_prefix] = cached
         return self._changes[path_prefix]
 
     def __repr__(self):
-        return '<WalkEntry commit=%s, changes=%r>' % (
-          self.commit.id, self.changes())
+        return "<WalkEntry commit={}, changes={!r}>".format(
+            self.commit.id,
+            self.changes(),
+        )
 
 
-class _CommitTimeQueue(object):
+class _CommitTimeQueue:
     """Priority queue of WalkEntry objects by commit time."""
 
-    def __init__(self, walker):
+    def __init__(self, walker: "Walker"):
         self._walker = walker
         self._store = walker.store
         self._get_parents = walker.get_parents
         self._excluded = walker.excluded
-        self._pq = []
-        self._pq_set = set()
-        self._seen = set()
-        self._done = set()
+        self._pq: List[Tuple[int, Commit]] = []
+        self._pq_set: Set[ObjectID] = set()
+        self._seen: Set[ObjectID] = set()
+        self._done: Set[ObjectID] = set()
         self._min_time = walker.since
         self._last = None
         self._extra_commits_left = _MAX_EXTRA_COMMITS
@@ -139,11 +138,11 @@ class _CommitTimeQueue(object):
         for commit_id in chain(walker.include, walker.excluded):
             self._push(commit_id)
 
-    def _push(self, object_id):
+    def _push(self, object_id: bytes):
         try:
             obj = self._store[object_id]
-        except KeyError:
-            raise MissingCommitError(object_id)
+        except KeyError as exc:
+            raise MissingCommitError(object_id) from exc
         if isinstance(obj, Tag):
             self._push(obj.object[1])
             return
@@ -187,8 +186,7 @@ class _CommitTimeQueue(object):
             is_excluded = sha in self._excluded
             if is_excluded:
                 self._exclude_parents(commit)
-                if self._pq and all(c.id in self._excluded
-                                    for _, c in self._pq):
+                if self._pq and all(c.id in self._excluded for _, c in self._pq):
                     _, n = self._pq[0]
                     if self._last and n.commit_time >= self._last.commit_time:
                         # If the next commit is newer than the last one, we
@@ -200,8 +198,7 @@ class _CommitTimeQueue(object):
                     else:
                         reset_extra_commits = False
 
-            if (self._min_time is not None and
-                    commit.commit_time < self._min_time):
+            if self._min_time is not None and commit.commit_time < self._min_time:
                 # We want to stop walking at min_time, but commits at the
                 # boundary may be out of order with respect to their parents.
                 # So we walk _MAX_EXTRA_COMMITS more commits once we hit this
@@ -225,18 +222,29 @@ class _CommitTimeQueue(object):
     __next__ = next
 
 
-class Walker(object):
+class Walker:
     """Object for performing a walk of commits in a store.
 
     Walker objects are initialized with a store and other options and can then
     be treated as iterators of Commit objects.
     """
 
-    def __init__(self, store, include, exclude=None, order=ORDER_DATE,
-                 reverse=False, max_entries=None, paths=None,
-                 rename_detector=None, follow=False, since=None, until=None,
-                 get_parents=lambda commit: commit.parents,
-                 queue_cls=_CommitTimeQueue):
+    def __init__(
+        self,
+        store,
+        include: List[bytes],
+        exclude: Optional[List[bytes]] = None,
+        order: str = 'date',
+        reverse: bool = False,
+        max_entries: Optional[int] = None,
+        paths: Optional[List[bytes]] = None,
+        rename_detector: Optional[RenameDetector] = None,
+        follow: bool = False,
+        since: Optional[int] = None,
+        until: Optional[int] = None,
+        get_parents=lambda commit: commit.parents,
+        queue_cls=_CommitTimeQueue,
+    ):
         """Constructor.
 
         Args:
@@ -266,7 +274,7 @@ class Walker(object):
         # Note: when adding arguments to this method, please also update
         # dulwich.repo.BaseRepo.get_walker
         if order not in ALL_ORDERS:
-            raise ValueError('Unknown walk order %s' % order)
+            raise ValueError("Unknown walk order %s" % order)
         self.store = store
         if isinstance(include, bytes):
             # TODO(jelmer): Really, this should require a single type.
@@ -288,16 +296,20 @@ class Walker(object):
 
         self._num_entries = 0
         self._queue = queue_cls(self)
-        self._out_queue = collections.deque()
+        self._out_queue: Deque[WalkEntry] = collections.deque()
 
     def _path_matches(self, changed_path):
         if changed_path is None:
             return False
+        if self.paths is None:
+            return True
         for followed_path in self.paths:
             if changed_path == followed_path:
                 return True
-            if (changed_path.startswith(followed_path) and
-                    changed_path[len(followed_path)] == b'/'[0]):
+            if (
+                changed_path.startswith(followed_path)
+                and changed_path[len(followed_path)] == b"/"[0]
+            ):
                 return True
         return False
 

@@ -1,9 +1,10 @@
+from typing import Any, Callable, Optional
+
 from anki.hooks import wrap
 from aqt import mw
 from aqt.editor import Editor, EditorWebView
-from aqt.progress import ProgressManager
+from aqt.progress import ProgressManager, ProgressDialog
 from aqt.qt import QCursor, Qt
-from aqt.utils import showInfo, tooltip
 
 # necessary in order to use methods defined in Editor and EditorWebView
 # without setting up the UI
@@ -13,18 +14,18 @@ myprogress = False
 
 
 class semiEditor(Editor):
-    def __init__(self):
+    def __init__(self) -> None:
         self.mw = mw
-        self.parentWindow = "EFDRCsemiedit"
+        self.parentWindow = "EFDRCsemiedit"  # type: ignore
 
 
 class semiEditorWebView(EditorWebView):
-    def __init__(self):
+    def __init__(self) -> None:
         self.mw = mw
         self.editor = semiEditor()
 
 
-def mystart(*args, **kwargs):
+def mystart(*args: Any, **kwargs: Any) -> Optional[ProgressDialog]:
     global myprogress
     _old = kwargs.pop("_old")
     if "parent" in kwargs:
@@ -37,14 +38,14 @@ def mystart(*args, **kwargs):
     if parent == "EFDRCsemiedit":
         # Don't show progress window when pasting images while in review.
         myprogress = True
-        mw.app.setOverrideCursor(QCursor(Qt.WaitCursor))
-        return
+        mw.app.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
+        return None
     else:
         myprogress = False
         return _old(*args, **kwargs)
 
 
-def myfinish(self, _old):
+def myfinish(self: ProgressManager, _old: Callable) -> None:
     global myprogress
     if myprogress:
         myprogress = False
@@ -54,5 +55,5 @@ def myfinish(self, _old):
         return _old(self)
 
 
-ProgressManager.start = wrap(ProgressManager.start, mystart, "around")
-ProgressManager.finish = wrap(ProgressManager.finish, myfinish, "around")
+ProgressManager.start = wrap(ProgressManager.start, mystart, "around")  # type: ignore
+ProgressManager.finish = wrap(ProgressManager.finish, myfinish, "around")  # type: ignore

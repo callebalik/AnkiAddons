@@ -1,0 +1,24 @@
+.fields.svelte-1hyhi5l {
+  padding: 1px 3px 0;
+  grid-gap: 0px;
+  overflow:scroll;
+}
+
+/* .fields.svelte-1hyhi5::-webkit-scrollbar {
+  display: none;  /* Safari and Chrome */
+} */
+
+/* ::-webkit-scrollbar {
+  width: 0;  /* Remove scrollbar space */
+  background: transparent;  /* Optional: just make scrollbar invisible */
+}
+/* Optional: show position indicator in red */
+::-webkit-scrollbar-thumb {
+  background: #FF0000;
+} */
+
+
+*::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+}

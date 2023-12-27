@@ -1,1 +1,1 @@
-{"name": "Symbols As You Type", "mod": 1588257126, "disabled": false, "conflicts": [], "max_point_version": 24, "min_point_version": 0, "branch_index": 0}
+{"name": "Symbols As You Type", "mod": 1654661360, "disabled": false, "conflicts": ["insert_symbols"], "max_point_version": 53, "min_point_version": 0, "branch_index": 0, "update_enabled": true, "homepage": "https://github.com/jefdongus/insert-symbols-anki-addon"}

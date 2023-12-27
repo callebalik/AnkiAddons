@@ -1,12 +1,14 @@
-from anki.importing import Anki2Importer
-from anki.lang import _
-from anki.utils import json
-from anki.hooks import schema_will_change
-from aqt import mw
-from aqt.utils import showWarning
+import time
 
-from . import dialog
+from anki.hooks import schema_will_change
+from anki.importing import Anki2Importer
+from anki.importing.anki2 import Anki2Importer
+from anki.lang import _
+from aqt import mw
+from aqt import appVersion
+
 from .config import getUserOption
+from .dialog import returnTagsText
 from .note_type_mapping import create_mapping_on_field_name_equality
 
 # #########################################################
@@ -33,7 +35,7 @@ def getUserOptionSpecial(key=None, default=None):
         return default
 
 
-def newImportNotes(self) -> None:
+def newImportNotes(self: Anki2Importer) -> None:
     # build guid -> (id,mod,mid) hash & map of existing note ids
     self._notes = {}
     existing = {}
@@ -112,13 +114,17 @@ def newImportNotes(self) -> None:
                         if updateNoteType and mapping:
                             self.dst.models.change(
                                 old_model,
-                                [note[NID]],
+                                [oldNid],
                                 target_model,
                                 mapping.get_field_map(),
                                 mapping.get_card_type_map(),
                             )
 
+                            note[0] = oldNid
+                            note[4] = usn
+                            note[6] = self._mungeMedia(note[MID], note[6])
                             update.append(note)
+                            dirty.append(note[0])
 
                         ######### /note type mapping
                         else:
@@ -157,6 +163,25 @@ def newImportNotes(self) -> None:
 
         newTags = set(newTags)
         togetherTags = " %s " % " ".join(newTags)
+
+        ######### KEEP tags
+        keepTags = [t for t in note[5].replace("\u3000", " ").split(" ") if t]
+        for tag in oldnote.tags:
+            for i in keepTags:
+                if i.lower() == tag.lower():
+                    tag = i
+
+            for item in returnTagsText():
+                if item in tag:
+                    keepTags.append(tag)
+
+            if "marked" in tag or "leech" in tag:
+                keepTags.append(tag)
+
+        keepTags = set(keepTags)
+        keepTagsTogether = " %s " % " ".join(keepTags)
+        ######### /KEEP tags
+
         mid = str(note[2])
         if mid in midCheck:
             model = mw.col.models.get(mid)
@@ -197,6 +222,8 @@ def newImportNotes(self) -> None:
                     pass
         if getUserOptionSpecial("Combine tagging", False):
             note[5] = togetherTags
+        else:
+            note[5] = keepTagsTogether
 
     self.log.append(_("Notes found in file: %d") % total)
 
@@ -360,4 +387,16 @@ def _did(self, did: int):
     return newid
 
 
+def intTime(scale: int = 1) -> int:
+    # copied from aqt.utils of Anki versions < 2.1.50
+    "The time in integer seconds. Pass scale=1000 to get milliseconds."
+    return int(time.time() * scale)
+
+
 Anki2Importer._did = _did
+
+anki_version = tuple(int(p) for p in appVersion.split("."))
+if anki_version >= (2, 1, 54):
+    from .new_importer import patch_new_importer
+
+    patch_new_importer()

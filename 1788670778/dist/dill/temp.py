@@ -2,9 +2,9 @@
 #
 # Author: Mike McKerns (mmckerns @caltech and @uqfoundation)
 # Copyright (c) 2008-2016 California Institute of Technology.
-# Copyright (c) 2016-2017 The Uncertainty Quantification Foundation.
+# Copyright (c) 2016-2023 The Uncertainty Quantification Foundation.
 # License: 3-clause BSD.  The full license text is available at:
-#  - http://trac.mystic.cacr.caltech.edu/project/pathos/browser/dill/LICENSE
+#  - https://github.com/uqfoundation/dill/blob/master/LICENSE
 """
 Methods for serialized objects (or source code) stored in temporary files
 and file-like objects.
@@ -12,13 +12,11 @@ and file-like objects.
 #XXX: better instead to have functions write to any given file-like object ?
 #XXX: currently, all file-like objects are created by the function...
 
-from __future__ import absolute_import
 __all__ = ['dump_source', 'dump', 'dumpIO_source', 'dumpIO',\
            'load_source', 'load', 'loadIO_source', 'loadIO',\
            'capture']
 
 import contextlib
-from .dill import PY3
 
 
 @contextlib.contextmanager
@@ -26,17 +24,14 @@ def capture(stream='stdout'):
     """builds a context that temporarily replaces the given stream name
 
     >>> with capture('stdout') as out:
-    ...   print "foo!"
+    ...   print ("foo!")
     ... 
-    >>> print out.getvalue()
+    >>> print (out.getvalue())
     foo!
 
     """
     import sys
-    if PY3:
-        from io import StringIO
-    else:
-        from StringIO import StringIO
+    from io import StringIO
     orig = getattr(sys, stream)
     setattr(sys, stream, StringIO())
     try:
@@ -111,6 +106,7 @@ NOTE: Keep the return value for as long as you want your file to exist !
     """ #XXX: write a "load_source"?
     from .source import importable, getname
     import tempfile
+    kwds.setdefault('delete', True)
     kwds.pop('suffix', '') # this is *always* '.py'
     alias = kwds.pop('alias', '') #XXX: include an alias so a name is known
     name = str(alias) or getname(object)
@@ -162,6 +158,7 @@ NOTE: Keep the return value for as long as you want your file to exist !
     """
     import dill as pickle
     import tempfile
+    kwds.setdefault('delete', True)
     file = tempfile.NamedTemporaryFile(**kwds)
     pickle.dump(object, file)
     file.flush()
@@ -177,10 +174,7 @@ def loadIO(buffer, **kwds):
     [1, 2, 3, 4, 5]
     """
     import dill as pickle
-    if PY3:
-        from io import BytesIO as StringIO
-    else:
-        from StringIO import StringIO
+    from io import BytesIO as StringIO
     value = getattr(buffer, 'getvalue', buffer) # value or buffer.getvalue
     if value != buffer: value = value() # buffer.getvalue()
     return pickle.load(StringIO(value))
@@ -194,10 +188,7 @@ Loads with "dill.temp.loadIO".  Returns the buffer object.
     [1, 2, 3, 4, 5]
     """
     import dill as pickle
-    if PY3:
-        from io import BytesIO as StringIO
-    else:
-        from StringIO import StringIO
+    from io import BytesIO as StringIO
     file = StringIO()
     pickle.dump(object, file)
     file.flush()
@@ -218,7 +209,7 @@ def loadIO_source(buffer, **kwds):
     alias = kwds.pop('alias', None)
     source = getattr(buffer, 'getvalue', buffer) # source or buffer.getvalue
     if source != buffer: source = source() # buffer.getvalue()
-    if PY3: source = source.decode() # buffer to string
+    source = source.decode() # buffer to string
     if not alias:
         tag = source.strip().splitlines()[-1].split()
         if tag[0] != '#NAME:':
@@ -244,10 +235,7 @@ Optional kwds:
     If 'alias' is specified, the object will be renamed to the given string.
     """
     from .source import importable, getname
-    if PY3:
-        from io import BytesIO as StringIO
-    else:
-        from StringIO import StringIO
+    from io import BytesIO as StringIO
     alias = kwds.pop('alias', '') #XXX: include an alias so a name is known
     name = str(alias) or getname(object)
     name = "\n#NAME: %s\n" % name
@@ -258,7 +246,7 @@ Optional kwds:
     return file
 
 
-del absolute_import, contextlib
+del contextlib
 
 
 # EOF

@@ -20,46 +20,57 @@
 
 """Tests for Dulwich."""
 
+__all__ = [
+    'SkipTest',
+    'TestCase',
+    'BlackboxTestCase',
+    'skipIf',
+    'expectedFailure',
+]
+
 import doctest
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
-
-
 # If Python itself provides an exception, use that
 import unittest
-from unittest import (  # noqa: F401
-    SkipTest,
-    TestCase as _TestCase,
-    skipIf,
-    expectedFailure,
-    )
+from unittest import SkipTest
+from unittest import TestCase as _TestCase  # noqa: F401
+from unittest import expectedFailure, skipIf
 
 
 class TestCase(_TestCase):
-
     def setUp(self):
-        super(TestCase, self).setUp()
-        self._old_home = os.environ.get("HOME")
-        os.environ["HOME"] = "/nonexistant"
+        super().setUp()
+        self.overrideEnv("HOME", "/nonexistent")
+        self.overrideEnv("GIT_CONFIG_NOSYSTEM", "1")
 
-    def tearDown(self):
-        super(TestCase, self).tearDown()
-        if self._old_home:
-            os.environ["HOME"] = self._old_home
+    def overrideEnv(self, name, value):
+        def restore():
+            if oldval is not None:
+                os.environ[name] = oldval
+            else:
+                del os.environ[name]
+
+        oldval = os.environ.get(name)
+        if value is not None:
+            os.environ[name] = value
         else:
-            del os.environ["HOME"]
+            del os.environ[name]
+        self.addCleanup(restore)
 
 
 class BlackboxTestCase(TestCase):
     """Blackbox testing."""
 
     # TODO(jelmer): Include more possible binary paths.
-    bin_directories = [os.path.abspath(os.path.join(
-            os.path.dirname(__file__), "..", "..", "bin")), '/usr/bin',
-            '/usr/local/bin']
+    bin_directories = [
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "bin")),
+        "/usr/bin",
+        "/usr/local/bin",
+    ]
 
     def bin_path(self, name):
         """Determine the full path of a binary.
@@ -92,82 +103,108 @@ class BlackboxTestCase(TestCase):
         # Save us from all that headache and call python with the bin script.
         argv = [sys.executable, self.bin_path(name)] + args
         return subprocess.Popen(
-                argv,
-                stdout=subprocess.PIPE,
-                stdin=subprocess.PIPE, stderr=subprocess.PIPE,
-                env=env)
+            argv,
+            stdout=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
 
 
 def self_test_suite():
     names = [
-        'archive',
-        'blackbox',
-        'client',
-        'config',
-        'diff_tree',
-        'fastexport',
-        'file',
-        'grafts',
-        'greenthreads',
-        'hooks',
-        'ignore',
-        'index',
-        'lfs',
-        'line_ending',
-        'lru_cache',
-        'mailmap',
-        'objects',
-        'objectspec',
-        'object_store',
-        'missing_obj_finder',
-        'pack',
-        'patch',
-        'porcelain',
-        'protocol',
-        'reflog',
-        'refs',
-        'repository',
-        'server',
-        'stash',
-        'utils',
-        'walk',
-        'web',
-        ]
-    module_names = ['dulwich.tests.test_' + name for name in names]
+        "archive",
+        "blackbox",
+        "bundle",
+        "client",
+        "config",
+        "credentials",
+        "diff_tree",
+        "fastexport",
+        "file",
+        "grafts",
+        "graph",
+        "greenthreads",
+        "hooks",
+        "ignore",
+        "index",
+        "lfs",
+        "line_ending",
+        "lru_cache",
+        "mailmap",
+        "objects",
+        "objectspec",
+        "object_store",
+        "missing_obj_finder",
+        "pack",
+        "patch",
+        "porcelain",
+        "protocol",
+        "reflog",
+        "refs",
+        "repository",
+        "server",
+        "stash",
+        "utils",
+        "walk",
+        "web",
+    ]
+    module_names = ["dulwich.tests.test_" + name for name in names]
     loader = unittest.TestLoader()
     return loader.loadTestsFromNames(module_names)
 
 
 def tutorial_test_suite():
-    import dulwich.client  # noqa: F401
-    import dulwich.config  # noqa: F401
-    import dulwich.index  # noqa: F401
-    import dulwich.reflog  # noqa: F401
-    import dulwich.repo  # noqa: F401
-    import dulwich.server  # noqa: F401
+    import dulwich.client
+    import dulwich.config
+    import dulwich.index
     import dulwich.patch  # noqa: F401
+
     tutorial = [
-        'introduction',
-        'file-format',
-        'repo',
-        'object-store',
-        'remote',
-        'conclusion',
-        ]
-    tutorial_files = ["../../docs/tutorial/%s.txt" % name for name in tutorial]
+        "introduction",
+        "file-format",
+        "repo",
+        "object-store",
+        "remote",
+        "conclusion",
+    ]
+    tutorial_files = [f"../../docs/tutorial/{name}.txt" for name in tutorial]
+
+    to_restore = []
+
+    def overrideEnv(name, value):
+        oldval = os.environ.get(name)
+        if value is not None:
+            os.environ[name] = value
+        else:
+            del os.environ[name]
+        to_restore.append((name, oldval))
 
     def setup(test):
         test.__old_cwd = os.getcwd()
         test.tempdir = tempfile.mkdtemp()
-        test.globs.update({'tempdir': test.tempdir})
+        test.globs.update({"tempdir": test.tempdir})
         os.chdir(test.tempdir)
+        overrideEnv("HOME", "/nonexistent")
+        overrideEnv("GIT_CONFIG_NOSYSTEM", "1")
 
     def teardown(test):
         os.chdir(test.__old_cwd)
         shutil.rmtree(test.tempdir)
+        for name, oldval in to_restore:
+            if oldval is not None:
+                os.environ[name] = oldval
+            else:
+                del os.environ[name]
+        to_restore.clear()
+
     return doctest.DocFileSuite(
-            module_relative=True, package='dulwich.tests',
-            setUp=setup, tearDown=teardown, *tutorial_files)
+        module_relative=True,
+        package="dulwich.tests",
+        setUp=setup,
+        tearDown=teardown,
+        *tutorial_files
+    )
 
 
 def nocompat_test_suite():
@@ -175,6 +212,7 @@ def nocompat_test_suite():
     result.addTests(self_test_suite())
     result.addTests(tutorial_test_suite())
     from dulwich.contrib import test_suite as contrib_test_suite
+
     result.addTests(contrib_test_suite())
     return result
 
@@ -182,6 +220,7 @@ def nocompat_test_suite():
 def compat_test_suite():
     result = unittest.TestSuite()
     from dulwich.tests.compat import test_suite as compat_test_suite
+
     result.addTests(compat_test_suite())
     return result
 
@@ -189,10 +228,12 @@ def compat_test_suite():
 def test_suite():
     result = unittest.TestSuite()
     result.addTests(self_test_suite())
-    if sys.platform != 'win32':
+    if sys.platform != "win32":
         result.addTests(tutorial_test_suite())
     from dulwich.tests.compat import test_suite as compat_test_suite
+
     result.addTests(compat_test_suite())
     from dulwich.contrib import test_suite as contrib_test_suite
+
     result.addTests(contrib_test_suite())
     return result
